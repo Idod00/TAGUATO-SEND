@@ -1,0 +1,76 @@
+services:
+  taguato-api:
+    image: atendai/evolution-api:latest
+    container_name: taguato-api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-8080}:8080"
+    env_file:
+      - .env
+    volumes:
+      - evolution_instances:/evolution/instances
+      - evolution_store:/evolution/store
+    depends_on:
+      taguato-postgres:
+        condition: service_healthy
+      taguato-redis:
+        condition: service_healthy
+    networks:
+      - taguato-network
+
+  taguato-manager:
+    image: atendai/evolution-manager:latest
+    container_name: taguato-manager
+    restart: unless-stopped
+    ports:
+      - "${MANAGER_PORT:-3000}:3000"
+    depends_on:
+      - taguato-api
+    networks:
+      - taguato-network
+
+  taguato-postgres:
+    image: postgres:15-alpine
+    container_name: taguato-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-taguato}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taguato_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-evolution}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taguato} -d ${POSTGRES_DB:-evolution}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - taguato-network
+
+  taguato-redis:
+    image: redis:7-alpine
+    container_name: taguato-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - taguato-network
+
+volumes:
+  evolution_instances:
+  evolution_store:
+  postgres_data:
+  redis_data:
+
+networks:
+  taguato-network:
+    driver: bridge
