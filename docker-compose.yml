@@ -1,10 +1,30 @@
 services:
-  taguato-api:
-    image: atendai/evolution-api:latest
-    container_name: taguato-api
+  taguato-gateway:
+    build: ./gateway
+    container_name: taguato-gateway
     restart: unless-stopped
     ports:
-      - "${API_PORT:-8080}:8080"
+      - "${GATEWAY_PORT:-80}:80"
+    environment:
+      - AUTHENTICATION_API_KEY=${AUTHENTICATION_API_KEY}
+      - PG_HOST=taguato-postgres
+      - PG_PORT=5432
+      - PG_DATABASE=${POSTGRES_DB:-evolution}
+      - PG_USER=${POSTGRES_USER:-taguato}
+      - PG_PASSWORD=${POSTGRES_PASSWORD:-taguato_secret}
+    depends_on:
+      taguato-api:
+        condition: service_started
+      taguato-postgres:
+        condition: service_healthy
+    networks:
+      - taguato-network
+
+  taguato-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: taguato-api
+    restart: unless-stopped
+    # Port 8080 is internal only - accessed via gateway
     env_file:
       - .env
     volumes:
@@ -28,8 +48,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-taguato}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taguato_secret}
       POSTGRES_DB: ${POSTGRES_DB:-evolution}
+      POSTGRES_HOST_AUTH_METHOD: md5
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./db/seed-admin.sh:/docker-entrypoint-initdb.d/02-seed-admin.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taguato} -d ${POSTGRES_DB:-evolution}"]
       interval: 10s

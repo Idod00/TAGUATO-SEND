@@ -26,6 +26,7 @@ Thumbs.db
 backups/
 *.sql
 *.sql.gz
+!db/init.sql
 
 # Logs
 logs/
