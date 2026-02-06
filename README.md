@@ -7,7 +7,7 @@ Basado en [Evolution API](https://github.com/EvolutionAPI/evolution-api) + [Evol
 ## Requisitos
 
 - Docker y Docker Compose
-- Puerto 8080 (API), 3000 (Panel), 5432 (PostgreSQL), 6379 (Redis) disponibles
+- Puerto 8080 (API + Panel), 5432 (PostgreSQL), 6379 (Redis) disponibles
 
 ## Instalación
 
@@ -28,12 +28,12 @@ cp .env.example .env
 | Servicio | URL | Descripción |
 |----------|-----|-------------|
 | API | http://localhost:8080 | Evolution API (backend) |
-| Panel | http://localhost:3000 | Evolution Manager (frontend) |
+| Panel | http://localhost:8080/manager | Evolution Manager (integrado) |
 | Swagger | http://localhost:8080/docs | Documentación interactiva |
 
 ## Uso del Panel Web
 
-1. Abrir http://localhost:3000
+1. Abrir http://localhost:8080/manager
 2. Conectar al servidor: `http://localhost:8080` con tu `AUTHENTICATION_API_KEY`
 3. Crear una instancia WhatsApp
 4. Escanear el código QR con tu teléfono

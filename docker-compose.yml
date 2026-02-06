@@ -18,17 +18,6 @@ services:
     networks:
       - taguato-network
 
-  taguato-manager:
-    image: atendai/evolution-manager:latest
-    container_name: taguato-manager
-    restart: unless-stopped
-    ports:
-      - "${MANAGER_PORT:-3000}:3000"
-    depends_on:
-      - taguato-api
-    networks:
-      - taguato-network
-
   taguato-postgres:
     image: postgres:15-alpine
     container_name: taguato-postgres
