@@ -4,6 +4,7 @@ RUN luarocks install pgmoon
 
 COPY nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
 COPY lua/ /usr/local/openresty/nginx/lua/
+COPY panel/ /usr/local/openresty/nginx/panel/
 
 EXPOSE 80
 

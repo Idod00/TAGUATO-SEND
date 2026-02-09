@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS taguato.users (
     api_token VARCHAR(64) UNIQUE NOT NULL,
     max_instances INT DEFAULT 1,
     is_active BOOLEAN DEFAULT true,
+    must_change_password BOOLEAN DEFAULT true,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );

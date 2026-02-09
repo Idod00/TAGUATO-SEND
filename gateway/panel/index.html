@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TAGUATO-SEND</title>
+  <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="/panel/css/style.css?v=1.2">
+</head>
+<body>
+
+  <!-- Login Screen -->
+  <div id="login-screen">
+    <div class="login-box">
+      <img src="/panel/img/logo.png" alt="TAGUATO" class="login-logo">
+      <h1>TAGUATO-SEND <svg class="whatsapp-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></h1>
+      <p class="subtitle">Panel de gestion WhatsApp</p>
+      <form id="login-form">
+        <div class="form-group">
+          <label for="login-user">Usuario</label>
+          <input type="text" id="login-user" class="form-control" autocomplete="username" required>
+        </div>
+        <div class="form-group">
+          <label for="login-pass">Contrasena</label>
+          <input type="password" id="login-pass" class="form-control" autocomplete="current-password" required>
+        </div>
+        <button type="submit" id="login-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Ingresar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Change Password Screen (forced on first login) -->
+  <div id="change-password-screen" class="hidden">
+    <div class="login-box">
+      <img src="/panel/img/logo.png" alt="TAGUATO" class="login-logo">
+      <h1>Cambiar Contrasena</h1>
+      <p class="subtitle">Debes cambiar tu contrasena antes de continuar</p>
+      <form id="change-password-form">
+        <div class="form-group">
+          <label for="cp-current">Contrasena actual</label>
+          <input type="password" id="cp-current" class="form-control" autocomplete="current-password" required>
+        </div>
+        <div class="form-group">
+          <label for="cp-new">Nueva contrasena</label>
+          <input type="password" id="cp-new" class="form-control" autocomplete="new-password" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label for="cp-confirm">Confirmar nueva contrasena</label>
+          <input type="password" id="cp-confirm" class="form-control" autocomplete="new-password" required minlength="6">
+        </div>
+        <button type="submit" id="cp-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Cambiar Contrasena</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- App (hidden until logged in) -->
+  <div id="app" class="hidden">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <img src="/panel/img/logo.png" alt="TAGUATO" class="sidebar-logo">
+        <div class="user-info"><span id="user-display"></span></div>
+      </div>
+      <nav>
+        <a href="#" class="nav-link active" data-section="instances">Instancias</a>
+        <a href="#" class="nav-link" data-section="messages">Mensajes</a>
+        <a href="#" class="nav-link" data-section="docs">API Docs</a>
+        <a href="#" class="nav-link hidden" id="nav-admin" data-section="admin">Admin</a>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="btn-logout" class="btn btn-ghost btn-sm">Cerrar sesion</button>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main-content">
+
+      <!-- Instances Section -->
+      <div id="section-instances" class="section">
+        <h2>Instancias WhatsApp</h2>
+        <form id="create-instance-form" class="inline-form">
+          <input type="text" id="new-instance-name" class="form-control" placeholder="Nombre de nueva instancia" required>
+          <button type="submit" class="btn btn-primary">Crear</button>
+        </form>
+        <div id="instances-list"></div>
+      </div>
+
+      <!-- Messages Section -->
+      <div id="section-messages" class="section hidden">
+        <h2>Enviar Mensaje</h2>
+        <form id="send-message-form" class="msg-form">
+          <div class="form-group">
+            <label for="msg-instance">Instancia</label>
+            <select id="msg-instance" class="form-control" required>
+              <option value="">Seleccionar instancia...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="msg-number">Numero destino</label>
+            <input type="text" id="msg-number" class="form-control" placeholder="595981123456" required>
+          </div>
+          <div class="form-group">
+            <label for="msg-text">Mensaje</label>
+            <textarea id="msg-text" class="form-control" rows="4" required></textarea>
+          </div>
+          <button type="submit" id="msg-send-btn" class="btn btn-primary">Enviar</button>
+        </form>
+      </div>
+
+      <!-- API Docs Section -->
+      <div id="section-docs" class="section hidden">
+        <div class="docs-header">
+          <h2>API Documentation</h2>
+          <p class="docs-subtitle">TAGUATO-SEND REST API &mdash; Autenticacion via header <code>apikey</code></p>
+          <div class="docs-base-url">
+            <span class="docs-label">Base URL:</span>
+            <code id="docs-base-url"></code>
+          </div>
+        </div>
+        <div id="docs-content"></div>
+      </div>
+
+      <!-- Admin Section -->
+      <div id="section-admin" class="section hidden">
+        <h2>Gestion de Usuarios</h2>
+
+        <form id="create-user-form" class="admin-create-form">
+          <div class="form-group">
+            <label for="new-user-name">Usuario</label>
+            <input type="text" id="new-user-name" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label for="new-user-pass">Contrasena</label>
+            <input type="password" id="new-user-pass" class="form-control" required>
+          </div>
+          <div class="form-group">
+            <label for="new-user-role">Rol</label>
+            <select id="new-user-role" class="form-control">
+              <option value="user">user</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="new-user-max">Max instancias</label>
+            <input type="number" id="new-user-max" class="form-control" value="1" min="0">
+          </div>
+          <div class="form-group full-width">
+            <button type="submit" class="btn btn-primary">Crear Usuario</button>
+          </div>
+        </form>
+
+        <div id="users-list"></div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- QR Modal -->
+  <div id="qr-modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" title="Cerrar">&times;</button>
+      <h3>Conectar Instancia</h3>
+      <div id="qr-content"></div>
+    </div>
+  </div>
+
+  <!-- Edit User Modal -->
+  <div id="edit-user-modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" title="Cerrar">&times;</button>
+      <h3 id="edit-user-title">Editar Usuario</h3>
+      <form id="edit-user-form">
+        <input type="hidden" id="edit-user-id">
+        <div class="form-group">
+          <label for="edit-user-role">Rol</label>
+          <select id="edit-user-role" class="form-control">
+            <option value="user">user</option>
+            <option value="admin">admin</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="edit-user-max">Max instancias</label>
+          <input type="number" id="edit-user-max" class="form-control" min="0">
+        </div>
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="edit-user-active">
+          <label for="edit-user-active">Activo</label>
+        </div>
+        <div class="form-group">
+          <label for="edit-user-pass">Nueva contrasena (dejar vacio para no cambiar)</label>
+          <input type="password" id="edit-user-pass" class="form-control">
+        </div>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/panel/js/api.js?v=1.2"></script>
+  <script src="/panel/js/docs-data.js?v=1.2"></script>
+  <script src="/panel/js/app.js?v=1.2"></script>
+</body>
+</html>

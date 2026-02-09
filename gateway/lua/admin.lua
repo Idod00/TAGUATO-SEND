@@ -61,7 +61,7 @@ if method == "POST" and uri == "/admin/users" then
     local res, err = db.query(
         [[INSERT INTO taguato.users (username, password_hash, role, api_token, max_instances)
           VALUES ($1, crypt($2, gen_salt('bf')), $3, $4, $5)
-          RETURNING id, username, role, api_token, max_instances, is_active, created_at]],
+          RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, created_at]],
         username, password, role, token, max_instances
     )
 
@@ -81,7 +81,7 @@ end
 -- GET /admin/users - List users
 if method == "GET" and uri == "/admin/users" then
     local res, err = db.query(
-        "SELECT id, username, role, api_token, max_instances, is_active, created_at, updated_at FROM taguato.users ORDER BY id"
+        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, created_at, updated_at FROM taguato.users ORDER BY id"
     )
 
     if not res then
@@ -96,7 +96,7 @@ end
 -- GET /admin/users/{id} - Get user with instances
 if method == "GET" and user_id then
     local res, err = db.query(
-        "SELECT id, username, role, api_token, max_instances, is_active, created_at, updated_at FROM taguato.users WHERE id = $1",
+        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, created_at, updated_at FROM taguato.users WHERE id = $1",
         user_id
     )
 
@@ -157,6 +157,8 @@ if method == "PUT" and user_id then
         idx = idx + 1
         sets[#sets + 1] = "password_hash = crypt($" .. idx .. ", gen_salt('bf'))"
         vals[idx] = body.password
+        -- Force password change on next login
+        sets[#sets + 1] = "must_change_password = true"
     end
 
     if body.regenerate_token then
@@ -180,7 +182,7 @@ if method == "PUT" and user_id then
 
     local sql = "UPDATE taguato.users SET " .. table.concat(sets, ", ") ..
                 " WHERE id = $" .. idx ..
-                " RETURNING id, username, role, api_token, max_instances, is_active, updated_at"
+                " RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, updated_at"
 
     local res, err = db.query(sql, unpack(vals))
 
