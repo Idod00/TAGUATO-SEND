@@ -31,6 +31,7 @@ const App = (() => {
     if (section === 'messages') loadInstanceSelect();
     if (section === 'docs') renderDocs();
     if (section === 'admin') loadUsers();
+    if (section === 'status') loadStatusSection();
   }
 
   // --- Auth ---
@@ -122,10 +123,13 @@ const App = (() => {
 
     // Show/hide admin nav
     const adminNav = $('#nav-admin');
+    const statusNav = $('#nav-status');
     if (currentUser.role === 'admin') {
       show(adminNav);
+      show(statusNav);
     } else {
       hide(adminNav);
+      hide(statusNav);
     }
     navigate('instances');
   }
@@ -372,6 +376,323 @@ const App = (() => {
     }
   }
 
+  // --- Status Admin ---
+  async function loadStatusSection() {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    loadStatusHealth();
+    loadIncidentServices();
+    loadIncidents();
+    loadMaintenanceServices();
+    loadMaintenances();
+  }
+
+  async function loadStatusHealth() {
+    const container = $('#status-health-overview');
+    container.innerHTML = '<div class="loading">Verificando servicios...</div>';
+    try {
+      const data = await API.getPublicStatus();
+      container.innerHTML = (data.services || []).map(svc => {
+        const st = svc.status || 'unknown';
+        const label = st === 'operational' ? 'Operativo' :
+                      st === 'degraded' ? 'Degradado' :
+                      st === 'partial_outage' ? 'Parcial' : 'Caido';
+        return `
+          <div class="status-health-card">
+            <span class="status-dot status-dot-${esc(st)}"></span>
+            <div>
+              <div class="svc-name">${esc(svc.name)}</div>
+              <div class="svc-detail">${label} &middot; ${svc.response_time}ms</div>
+            </div>
+          </div>`;
+      }).join('');
+    } catch {
+      container.innerHTML = '<div class="empty">Error al verificar servicios</div>';
+    }
+  }
+
+  async function loadIncidentServices() {
+    const container = $('#inc-services-checkboxes');
+    try {
+      const data = await API.listIncidentServices();
+      container.innerHTML = (data.services || []).map(svc => `
+        <label>
+          <input type="checkbox" name="inc-svc" value="${svc.id}">
+          ${esc(svc.name)}
+        </label>
+      `).join('');
+    } catch {
+      container.innerHTML = '<span style="color:var(--text-light);font-size:0.85rem;">Error cargando servicios</span>';
+    }
+  }
+
+  async function loadIncidents() {
+    const activeList = $('#active-incidents-list');
+    const pastList = $('#past-incidents-list');
+    activeList.innerHTML = '<div class="loading">Cargando...</div>';
+    pastList.innerHTML = '';
+    try {
+      const data = await API.listIncidents();
+      const incidents = data.incidents || [];
+      const active = incidents.filter(i => i.status !== 'resolved');
+      const past = incidents.filter(i => i.status === 'resolved');
+
+      if (active.length === 0) {
+        activeList.innerHTML = '<div class="empty">No hay incidentes activos</div>';
+      } else {
+        activeList.innerHTML = active.map(renderIncidentCard).join('');
+      }
+
+      if (past.length === 0) {
+        pastList.innerHTML = '<div class="empty">No hay incidentes resueltos</div>';
+      } else {
+        pastList.innerHTML = past.map(renderIncidentCard).join('');
+      }
+    } catch {
+      activeList.innerHTML = '<div class="empty">Error al cargar incidentes</div>';
+    }
+  }
+
+  function renderIncidentCard(inc) {
+    const svcs = (inc.affected_services || []).map(s =>
+      `<span class="incident-svc-tag">${esc(s.name)}</span>`
+    ).join('');
+
+    const updates = (inc.updates || []).map(u => `
+      <div class="incident-timeline-item">
+        <div class="tl-header">
+          <span class="badge badge-status-${esc(u.status)}">${esc(u.status)}</span>
+          <span class="tl-time">${formatDate(u.created_at)}${u.created_by_name ? ' - ' + esc(u.created_by_name) : ''}</span>
+        </div>
+        <div class="tl-message">${esc(u.message)}</div>
+      </div>
+    `).join('');
+
+    const actions = inc.status !== 'resolved' ? `
+      <button class="btn btn-sm btn-primary" onclick="App.openIncidentUpdate(${inc.id})">Agregar Update</button>
+      <button class="btn btn-sm btn-danger" onclick="App.confirmDeleteIncident(${inc.id}, '${esc(inc.title)}')">Eliminar</button>
+    ` : `
+      <button class="btn btn-sm btn-danger" onclick="App.confirmDeleteIncident(${inc.id}, '${esc(inc.title)}')">Eliminar</button>
+    `;
+
+    return `
+      <div class="incident-card">
+        <div class="incident-card-header">
+          <h4>${esc(inc.title)}</h4>
+          <div class="incident-card-meta">
+            <span class="badge badge-severity-${esc(inc.severity)}">${esc(inc.severity)}</span>
+            <span class="badge badge-status-${esc(inc.status)}">${esc(inc.status)}</span>
+          </div>
+        </div>
+        ${svcs ? '<div class="incident-services-tags">' + svcs + '</div>' : ''}
+        <div class="incident-timeline">${updates}</div>
+        <div class="incident-card-actions">${actions}</div>
+      </div>`;
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('es', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  async function handleCreateIncident(e) {
+    e.preventDefault();
+    const title = $('#inc-title').value.trim();
+    const severity = $('#inc-severity').value;
+    const status = $('#inc-status').value;
+    const message = $('#inc-message').value.trim();
+    const serviceIds = Array.from($$('input[name="inc-svc"]:checked')).map(cb => parseInt(cb.value));
+
+    if (!title || !message) {
+      showToast('Titulo y mensaje son requeridos', 'error');
+      return;
+    }
+
+    try {
+      await API.createIncident(title, severity, status, message, serviceIds);
+      showToast('Incidente creado');
+      $('#inc-title').value = '';
+      $('#inc-message').value = '';
+      $$('input[name="inc-svc"]:checked').forEach(cb => { cb.checked = false; });
+      loadIncidents();
+      loadStatusHealth();
+    } catch (err) {
+      showToast(err.message || 'Error al crear incidente', 'error');
+    }
+  }
+
+  function openIncidentUpdate(incidentId) {
+    $('#iu-incident-id').value = incidentId;
+    $('#iu-status').value = 'investigating';
+    $('#iu-message').value = '';
+    show($('#incident-update-modal'));
+  }
+
+  async function handleIncidentUpdate(e) {
+    e.preventDefault();
+    const incidentId = $('#iu-incident-id').value;
+    const status = $('#iu-status').value;
+    const message = $('#iu-message').value.trim();
+    if (!message) {
+      showToast('El mensaje es requerido', 'error');
+      return;
+    }
+    try {
+      await API.addIncidentUpdate(incidentId, status, message);
+      showToast('Update agregado');
+      closeModal('incident-update-modal');
+      loadIncidents();
+      if (status === 'resolved') loadStatusHealth();
+    } catch (err) {
+      showToast(err.message || 'Error al agregar update', 'error');
+    }
+  }
+
+  function confirmDeleteIncident(id, title) {
+    if (confirm('Eliminar incidente "' + title + '"? Esta accion no se puede deshacer.')) {
+      doDeleteIncident(id);
+    }
+  }
+
+  async function doDeleteIncident(id) {
+    try {
+      await API.deleteIncident(id);
+      showToast('Incidente eliminado');
+      loadIncidents();
+    } catch (err) {
+      showToast(err.message || 'Error al eliminar', 'error');
+    }
+  }
+
+  // --- Maintenance Admin ---
+  async function loadMaintenanceServices() {
+    const container = $('#maint-services-checkboxes');
+    try {
+      const data = await API.listIncidentServices();
+      container.innerHTML = (data.services || []).map(svc => `
+        <label>
+          <input type="checkbox" name="maint-svc" value="${svc.id}">
+          ${esc(svc.name)}
+        </label>
+      `).join('');
+    } catch {
+      container.innerHTML = '<span style="color:var(--text-light);font-size:0.85rem;">Error cargando servicios</span>';
+    }
+  }
+
+  async function loadMaintenances() {
+    const list = $('#maintenance-list');
+    list.innerHTML = '<div class="loading">Cargando...</div>';
+    try {
+      const data = await API.listMaintenances();
+      const items = data.maintenances || [];
+      if (items.length === 0) {
+        list.innerHTML = '<div class="empty">No hay mantenimientos programados</div>';
+        return;
+      }
+      list.innerHTML = items.map(renderMaintenanceCard).join('');
+    } catch {
+      list.innerHTML = '<div class="empty">Error al cargar mantenimientos</div>';
+    }
+  }
+
+  function renderMaintenanceCard(m) {
+    const svcs = (m.affected_services || []).map(s =>
+      `<span class="incident-svc-tag">${esc(s.name)}</span>`
+    ).join('');
+
+    const statusLabel = m.status === 'scheduled' ? 'Programado' :
+                        m.status === 'in_progress' ? 'En progreso' : 'Completado';
+
+    let actions = '';
+    if (m.status === 'scheduled') {
+      actions += `<button class="btn btn-sm btn-primary" onclick="App.startMaintenance(${m.id})">Iniciar</button>`;
+    }
+    if (m.status === 'in_progress') {
+      actions += `<button class="btn btn-sm btn-primary" onclick="App.completeMaintenance(${m.id})">Completar</button>`;
+    }
+    actions += `<button class="btn btn-sm btn-danger" onclick="App.confirmDeleteMaintenance(${m.id}, '${esc(m.title)}')">Eliminar</button>`;
+
+    return `
+      <div class="maintenance-card">
+        <div class="maintenance-card-header">
+          <h4>${esc(m.title)}</h4>
+          <div class="maintenance-card-meta">
+            <span class="badge badge-maint-${esc(m.status)}">${esc(statusLabel)}</span>
+          </div>
+        </div>
+        <div class="maintenance-card-details">
+          ${m.description ? '<p>' + esc(m.description) + '</p>' : ''}
+          <div class="maint-dates">Inicio: ${formatDate(m.scheduled_start)} &mdash; Fin: ${formatDate(m.scheduled_end)}</div>
+        </div>
+        ${svcs ? '<div class="incident-services-tags">' + svcs + '</div>' : ''}
+        <div class="maintenance-card-actions">${actions}</div>
+      </div>`;
+  }
+
+  async function handleCreateMaintenance(e) {
+    e.preventDefault();
+    const title = $('#maint-title').value.trim();
+    const description = $('#maint-desc').value.trim();
+    const scheduledStart = $('#maint-start').value;
+    const scheduledEnd = $('#maint-end').value;
+    const serviceIds = Array.from($$('input[name="maint-svc"]:checked')).map(cb => parseInt(cb.value));
+
+    if (!title || !scheduledStart || !scheduledEnd) {
+      showToast('Titulo, fecha inicio y fecha fin son requeridos', 'error');
+      return;
+    }
+
+    try {
+      await API.createMaintenance(title, description, scheduledStart, scheduledEnd, serviceIds);
+      showToast('Mantenimiento creado');
+      $('#maint-title').value = '';
+      $('#maint-desc').value = '';
+      $('#maint-start').value = '';
+      $('#maint-end').value = '';
+      $$('input[name="maint-svc"]:checked').forEach(cb => { cb.checked = false; });
+      loadMaintenances();
+    } catch (err) {
+      showToast(err.message || 'Error al crear mantenimiento', 'error');
+    }
+  }
+
+  async function startMaintenance(id) {
+    try {
+      await API.updateMaintenance(id, { status: 'in_progress' });
+      showToast('Mantenimiento iniciado');
+      loadMaintenances();
+    } catch (err) {
+      showToast(err.message || 'Error al iniciar mantenimiento', 'error');
+    }
+  }
+
+  async function completeMaintenance(id) {
+    try {
+      await API.updateMaintenance(id, { status: 'completed' });
+      showToast('Mantenimiento completado');
+      loadMaintenances();
+    } catch (err) {
+      showToast(err.message || 'Error al completar mantenimiento', 'error');
+    }
+  }
+
+  function confirmDeleteMaintenance(id, title) {
+    if (confirm('Eliminar mantenimiento "' + title + '"?')) {
+      doDeleteMaintenance(id);
+    }
+  }
+
+  async function doDeleteMaintenance(id) {
+    try {
+      await API.deleteMaintenance(id);
+      showToast('Mantenimiento eliminado');
+      loadMaintenances();
+    } catch (err) {
+      showToast(err.message || 'Error al eliminar', 'error');
+    }
+  }
+
   // --- API Docs ---
   let docsRendered = false;
 
@@ -519,6 +840,9 @@ const App = (() => {
     $('#send-message-form').addEventListener('submit', handleSendMessage);
     $('#create-user-form').addEventListener('submit', handleCreateUser);
     $('#edit-user-form').addEventListener('submit', handleUpdateUser);
+    $('#create-incident-form').addEventListener('submit', handleCreateIncident);
+    $('#incident-update-form').addEventListener('submit', handleIncidentUpdate);
+    $('#create-maintenance-form').addEventListener('submit', handleCreateMaintenance);
     $('#btn-logout').addEventListener('click', logout);
 
     $$('.nav-link').forEach(link => {
@@ -561,6 +885,11 @@ const App = (() => {
     confirmDeleteInstance,
     editUser,
     confirmDeleteUser,
+    openIncidentUpdate,
+    confirmDeleteIncident,
+    startMaintenance,
+    completeMaintenance,
+    confirmDeleteMaintenance,
     closeModal,
     toggleDocsGroup,
     toggleEndpoint,

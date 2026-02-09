@@ -34,3 +34,91 @@ CREATE TABLE IF NOT EXISTS taguato.user_instances (
 CREATE INDEX IF NOT EXISTS idx_users_token ON taguato.users(api_token);
 CREATE INDEX IF NOT EXISTS idx_user_instances_user ON taguato.user_instances(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_instances_name ON taguato.user_instances(instance_name);
+
+-- ============================================
+-- Status page tables
+-- ============================================
+
+-- Monitored services (pre-seeded)
+CREATE TABLE IF NOT EXISTS taguato.services (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    description TEXT,
+    display_order INT DEFAULT 0,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Incidents
+CREATE TABLE IF NOT EXISTS taguato.incidents (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    severity VARCHAR(20) NOT NULL CHECK (severity IN ('minor', 'major', 'critical')),
+    status VARCHAR(20) NOT NULL DEFAULT 'investigating' CHECK (status IN ('investigating', 'identified', 'monitoring', 'resolved')),
+    created_by INT REFERENCES taguato.users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    resolved_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_incidents_status ON taguato.incidents(status);
+CREATE INDEX IF NOT EXISTS idx_incidents_created ON taguato.incidents(created_at DESC);
+
+-- Incident timeline updates
+CREATE TABLE IF NOT EXISTS taguato.incident_updates (
+    id SERIAL PRIMARY KEY,
+    incident_id INT NOT NULL REFERENCES taguato.incidents(id) ON DELETE CASCADE,
+    status VARCHAR(20) NOT NULL CHECK (status IN ('investigating', 'identified', 'monitoring', 'resolved')),
+    message TEXT NOT NULL,
+    created_by INT REFERENCES taguato.users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_incident_updates_incident ON taguato.incident_updates(incident_id);
+
+-- Affected services per incident (junction table)
+CREATE TABLE IF NOT EXISTS taguato.incident_services (
+    incident_id INT NOT NULL REFERENCES taguato.incidents(id) ON DELETE CASCADE,
+    service_id INT NOT NULL REFERENCES taguato.services(id) ON DELETE CASCADE,
+    PRIMARY KEY (incident_id, service_id)
+);
+
+-- Scheduled maintenances
+CREATE TABLE IF NOT EXISTS taguato.scheduled_maintenances (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    scheduled_start TIMESTAMP NOT NULL,
+    scheduled_end TIMESTAMP NOT NULL,
+    status VARCHAR(20) DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'in_progress', 'completed')),
+    created_by INT REFERENCES taguato.users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Junction: maintenance <-> affected services
+CREATE TABLE IF NOT EXISTS taguato.maintenance_services (
+    maintenance_id INT NOT NULL REFERENCES taguato.scheduled_maintenances(id) ON DELETE CASCADE,
+    service_id INT NOT NULL REFERENCES taguato.services(id) ON DELETE CASCADE,
+    PRIMARY KEY (maintenance_id, service_id)
+);
+
+-- Uptime check history (periodic snapshots)
+CREATE TABLE IF NOT EXISTS taguato.uptime_checks (
+    id SERIAL PRIMARY KEY,
+    service_name VARCHAR(100) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    response_time INT DEFAULT 0,
+    checked_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_uptime_checks_service_time
+    ON taguato.uptime_checks(service_name, checked_at DESC);
+
+-- Seed default services
+INSERT INTO taguato.services (name, description, display_order) VALUES
+    ('Gateway', 'API Gateway y enrutamiento', 1),
+    ('Evolution API', 'Motor de WhatsApp', 2),
+    ('PostgreSQL', 'Base de datos', 3),
+    ('Redis', 'Cache y colas', 4)
+ON CONFLICT (name) DO NOTHING;

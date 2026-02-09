@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TAGUATO-SEND</title>
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/panel/css/style.css?v=1.2">
+  <link rel="stylesheet" href="/panel/css/style.css?v=1.3">
 </head>
 <body>
 
@@ -66,6 +66,7 @@
         <a href="#" class="nav-link active" data-section="instances">Instancias</a>
         <a href="#" class="nav-link" data-section="messages">Mensajes</a>
         <a href="#" class="nav-link" data-section="docs">API Docs</a>
+        <a href="#" class="nav-link hidden" id="nav-status" data-section="status">Status</a>
         <a href="#" class="nav-link hidden" id="nav-admin" data-section="admin">Admin</a>
       </nav>
       <div class="sidebar-footer">
@@ -153,6 +154,100 @@
         <div id="users-list"></div>
       </div>
 
+      <!-- Status Section (admin only) -->
+      <div id="section-status" class="section hidden">
+        <h2>Estado del Sistema</h2>
+
+        <!-- Health overview -->
+        <div id="status-health-overview" class="status-health-overview"></div>
+
+        <!-- Create incident form -->
+        <h3 style="font-size:1rem;margin-bottom:0.5rem;color:var(--primary);">Crear Incidente</h3>
+        <form id="create-incident-form" class="incident-create-form">
+          <div class="form-row">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="inc-title">Titulo</label>
+              <input type="text" id="inc-title" class="form-control" placeholder="Descripcion breve del incidente" required>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="inc-severity">Severidad</label>
+              <select id="inc-severity" class="form-control" required>
+                <option value="minor">Minor</option>
+                <option value="major">Major</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="inc-status">Estado inicial</label>
+              <select id="inc-status" class="form-control">
+                <option value="investigating">Investigating</option>
+                <option value="identified">Identified</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row-full">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="inc-message">Mensaje inicial</label>
+              <textarea id="inc-message" class="form-control" rows="2" placeholder="Estamos investigando problemas con..." required></textarea>
+            </div>
+          </div>
+          <div class="form-row-full">
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Servicios afectados</label>
+              <div id="inc-services-checkboxes" class="services-checkboxes"></div>
+            </div>
+          </div>
+          <div class="form-row-full" style="margin-top:0.75rem;">
+            <button type="submit" class="btn btn-primary">Crear Incidente</button>
+          </div>
+        </form>
+
+        <!-- Active incidents -->
+        <h3 class="incident-section-title">Incidentes Activos</h3>
+        <div id="active-incidents-list"></div>
+
+        <!-- Past incidents -->
+        <h3 class="incident-section-title">Incidentes Resueltos</h3>
+        <div id="past-incidents-list"></div>
+
+        <!-- Scheduled Maintenance -->
+        <h3 style="font-size:1rem;margin:2rem 0 0.5rem;color:var(--primary);">Mantenimiento Programado</h3>
+        <form id="create-maintenance-form" class="maintenance-create-form">
+          <div class="form-row">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="maint-title">Titulo</label>
+              <input type="text" id="maint-title" class="form-control" placeholder="Mantenimiento de base de datos" required>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="maint-desc">Descripcion</label>
+              <input type="text" id="maint-desc" class="form-control" placeholder="Descripcion opcional">
+            </div>
+          </div>
+          <div class="form-row" style="margin-top:0.75rem;">
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="maint-start">Inicio programado</label>
+              <input type="datetime-local" id="maint-start" class="form-control" required>
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+              <label for="maint-end">Fin programado</label>
+              <input type="datetime-local" id="maint-end" class="form-control" required>
+            </div>
+          </div>
+          <div class="form-row-full">
+            <div class="form-group" style="margin-bottom:0;">
+              <label>Servicios afectados</label>
+              <div id="maint-services-checkboxes" class="services-checkboxes"></div>
+            </div>
+          </div>
+          <div class="form-row-full" style="margin-top:0.75rem;">
+            <button type="submit" class="btn btn-primary">Crear Mantenimiento</button>
+          </div>
+        </form>
+
+        <h3 class="incident-section-title">Mantenimientos</h3>
+        <div id="maintenance-list"></div>
+      </div>
+
     </main>
   </div>
 
@@ -196,11 +291,36 @@
     </div>
   </div>
 
+  <!-- Incident Update Modal -->
+  <div id="incident-update-modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" title="Cerrar">&times;</button>
+      <h3>Agregar Update</h3>
+      <form id="incident-update-form">
+        <input type="hidden" id="iu-incident-id">
+        <div class="form-group">
+          <label for="iu-status">Nuevo Estado</label>
+          <select id="iu-status" class="form-control" required>
+            <option value="investigating">Investigating</option>
+            <option value="identified">Identified</option>
+            <option value="monitoring">Monitoring</option>
+            <option value="resolved">Resolved</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="iu-message">Mensaje</label>
+          <textarea id="iu-message" class="form-control" rows="3" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Agregar Update</button>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/panel/js/api.js?v=1.2"></script>
-  <script src="/panel/js/docs-data.js?v=1.2"></script>
-  <script src="/panel/js/app.js?v=1.2"></script>
+  <script src="/panel/js/api.js?v=1.3"></script>
+  <script src="/panel/js/docs-data.js?v=1.3"></script>
+  <script src="/panel/js/app.js?v=1.3"></script>
 </body>
 </html>

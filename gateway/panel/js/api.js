@@ -116,11 +116,76 @@ const API = (() => {
     return await request('DELETE', '/admin/users/' + id);
   }
 
+  // Status & Incidents
+  async function getPublicStatus() {
+    const res = await fetch('/api/status');
+    return await res.json();
+  }
+
+  async function listIncidents() {
+    return await request('GET', '/admin/incidents');
+  }
+
+  async function listIncidentServices() {
+    return await request('GET', '/admin/incidents/services');
+  }
+
+  async function createIncident(title, severity, status, message, serviceIds) {
+    return await request('POST', '/admin/incidents', {
+      title,
+      severity,
+      status,
+      message,
+      service_ids: serviceIds,
+    });
+  }
+
+  async function addIncidentUpdate(incidentId, status, message) {
+    return await request('POST', '/admin/incidents/' + incidentId + '/updates', {
+      status,
+      message,
+    });
+  }
+
+  async function updateIncident(id, fields) {
+    return await request('PUT', '/admin/incidents/' + id, fields);
+  }
+
+  async function deleteIncident(id) {
+    return await request('DELETE', '/admin/incidents/' + id);
+  }
+
+  // Maintenance
+  async function listMaintenances() {
+    return await request('GET', '/admin/maintenance');
+  }
+
+  async function createMaintenance(title, description, scheduledStart, scheduledEnd, serviceIds) {
+    return await request('POST', '/admin/maintenance', {
+      title,
+      description,
+      scheduled_start: scheduledStart,
+      scheduled_end: scheduledEnd,
+      service_ids: serviceIds,
+    });
+  }
+
+  async function updateMaintenance(id, fields) {
+    return await request('PUT', '/admin/maintenance/' + id, fields);
+  }
+
+  async function deleteMaintenance(id) {
+    return await request('DELETE', '/admin/maintenance/' + id);
+  }
+
   return {
     getToken, getStoredUser, setSession, clearSession,
     login, logout, getProfile, changePassword,
     fetchInstances, createInstance, deleteInstance, connectInstance, getInstanceStatus,
     sendText,
     listUsers, createUser, updateUser, deleteUser,
+    getPublicStatus, listIncidents, listIncidentServices,
+    createIncident, addIncidentUpdate, updateIncident, deleteIncident,
+    listMaintenances, createMaintenance, updateMaintenance, deleteMaintenance,
   };
 })();

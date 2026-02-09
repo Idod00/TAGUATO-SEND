@@ -723,6 +723,291 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   color: #fff;
 }
 
+/* ===== Status Admin Section ===== */
+
+.status-health-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.status-health-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  box-shadow: var(--shadow);
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot-operational { background: #16a34a; }
+.status-dot-degraded { background: #d97706; }
+.status-dot-partial_outage { background: #ea580c; }
+.status-dot-major_outage { background: #dc2626; }
+
+.status-health-card .svc-name {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.status-health-card .svc-detail {
+  font-size: 0.75rem;
+  color: var(--text-light);
+}
+
+/* Incident form */
+.incident-create-form {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.incident-create-form .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.incident-create-form .form-row-full {
+  margin-top: 0.75rem;
+}
+
+.incident-create-form .services-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.incident-create-form .services-checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.incident-create-form .services-checkboxes input {
+  width: auto;
+}
+
+/* Incident cards */
+.incident-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+  box-shadow: var(--shadow);
+}
+
+.incident-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.incident-card-header h4 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.incident-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.badge-severity-minor { background: #fef9c3; color: #854d0e; }
+.badge-severity-major { background: #fed7aa; color: #9a3412; }
+.badge-severity-critical { background: #fee2e2; color: #991b1b; }
+
+.badge-status-investigating { background: #fee2e2; color: #991b1b; }
+.badge-status-identified { background: #fed7aa; color: #9a3412; }
+.badge-status-monitoring { background: #dbeafe; color: #1e40af; }
+.badge-status-resolved { background: #dcfce7; color: #166534; }
+
+.incident-services-tags {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.incident-svc-tag {
+  font-size: 0.7rem;
+  background: #f3e8e8;
+  color: var(--primary);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* Incident timeline */
+.incident-timeline {
+  border-left: 2px solid var(--border);
+  margin-left: 0.5rem;
+  padding-left: 1rem;
+  margin-top: 0.5rem;
+}
+
+.incident-timeline-item {
+  position: relative;
+  padding-bottom: 0.75rem;
+  font-size: 0.825rem;
+}
+
+.incident-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -1.32rem;
+  top: 0.35rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  border: 2px solid var(--bg-card);
+}
+
+.incident-timeline-item .tl-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.15rem;
+}
+
+.incident-timeline-item .tl-time {
+  font-size: 0.75rem;
+  color: var(--text-light);
+}
+
+.incident-timeline-item .tl-message {
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.incident-card-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.incident-section-title {
+  font-size: 1rem;
+  color: var(--text-light);
+  margin: 1.5rem 0 0.75rem;
+  font-weight: 600;
+}
+
+/* ===== Maintenance Admin Section ===== */
+
+.maintenance-create-form {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.maintenance-create-form .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.maintenance-create-form .form-row-full {
+  margin-top: 0.75rem;
+}
+
+.maintenance-create-form .services-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.maintenance-create-form .services-checkboxes label {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.maintenance-create-form .services-checkboxes input {
+  width: auto;
+}
+
+.maintenance-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+  box-shadow: var(--shadow);
+}
+
+.maintenance-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.maintenance-card-header h4 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+.maintenance-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.badge-maint-scheduled { background: #dbeafe; color: #1e40af; }
+.badge-maint-in_progress { background: #fed7aa; color: #9a3412; }
+.badge-maint-completed { background: #dcfce7; color: #166534; }
+
+.maintenance-card-details {
+  font-size: 0.85rem;
+  color: var(--text-light);
+  margin-bottom: 0.5rem;
+}
+
+.maintenance-card-details .maint-dates {
+  margin-bottom: 0.25rem;
+}
+
+.maintenance-card-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   #app { flex-direction: column; }
@@ -781,4 +1066,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     padding-left: 0;
     margin-top: 0.15rem;
   }
+
+  .incident-create-form .form-row { grid-template-columns: 1fr; }
+  .maintenance-create-form .form-row { grid-template-columns: 1fr; }
+  .status-health-overview { grid-template-columns: 1fr 1fr; }
 }

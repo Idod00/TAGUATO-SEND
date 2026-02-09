@@ -12,6 +12,8 @@ services:
       - PG_DATABASE=${POSTGRES_DB:-evolution}
       - PG_USER=${POSTGRES_USER:-taguato}
       - PG_PASSWORD=${POSTGRES_PASSWORD:-taguato_secret}
+      - REDIS_HOST=taguato-redis
+      - REDIS_PORT=6379
     depends_on:
       taguato-api:
         condition: service_started
