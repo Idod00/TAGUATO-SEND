@@ -54,15 +54,17 @@ if method == "POST" and uri == "/admin/users" then
         return
     end
 
+    local rate_limit_val = body.rate_limit
+
     -- Generate token
     local token = generate_token()
 
     -- Hash password and insert
     local res, err = db.query(
-        [[INSERT INTO taguato.users (username, password_hash, role, api_token, max_instances)
-          VALUES ($1, crypt($2, gen_salt('bf')), $3, $4, $5)
-          RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, created_at]],
-        username, password, role, token, max_instances
+        [[INSERT INTO taguato.users (username, password_hash, role, api_token, max_instances, rate_limit)
+          VALUES ($1, crypt($2, gen_salt('bf')), $3, $4, $5, $6)
+          RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, created_at]],
+        username, password, role, token, max_instances, rate_limit_val
     )
 
     if not res then
@@ -81,7 +83,7 @@ end
 -- GET /admin/users - List users
 if method == "GET" and uri == "/admin/users" then
     local res, err = db.query(
-        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, created_at, updated_at FROM taguato.users ORDER BY id"
+        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, created_at, updated_at FROM taguato.users ORDER BY id"
     )
 
     if not res then
@@ -96,7 +98,7 @@ end
 -- GET /admin/users/{id} - Get user with instances
 if method == "GET" and user_id then
     local res, err = db.query(
-        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, created_at, updated_at FROM taguato.users WHERE id = $1",
+        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, created_at, updated_at FROM taguato.users WHERE id = $1",
         user_id
     )
 
@@ -153,6 +155,12 @@ if method == "PUT" and user_id then
         vals[idx] = body.role
     end
 
+    if body.rate_limit ~= nil then
+        idx = idx + 1
+        sets[#sets + 1] = "rate_limit = $" .. idx
+        vals[idx] = body.rate_limit
+    end
+
     if body.password ~= nil then
         idx = idx + 1
         sets[#sets + 1] = "password_hash = crypt($" .. idx .. ", gen_salt('bf'))"
@@ -182,7 +190,7 @@ if method == "PUT" and user_id then
 
     local sql = "UPDATE taguato.users SET " .. table.concat(sets, ", ") ..
                 " WHERE id = $" .. idx ..
-                " RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, updated_at"
+                " RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, updated_at"
 
     local res, err = db.query(sql, unpack(vals))
 

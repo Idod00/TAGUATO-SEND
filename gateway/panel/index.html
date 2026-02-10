@@ -68,6 +68,7 @@
         <a href="#" class="nav-link" data-section="messages">Mensajes</a>
         <a href="#" class="nav-link" data-section="templates">Plantillas</a>
         <a href="#" class="nav-link" data-section="contacts">Contactos</a>
+        <a href="#" class="nav-link" data-section="sessions">Sesiones</a>
         <a href="#" class="nav-link" data-section="docs">API Docs</a>
         <a href="#" class="nav-link hidden" id="nav-status" data-section="status">Status</a>
         <a href="#" class="nav-link hidden" id="nav-admin" data-section="admin">Admin</a>
@@ -197,6 +198,12 @@
         <div id="contact-lists-container"></div>
       </div>
 
+      <!-- Sessions Section -->
+      <div id="section-sessions" class="section hidden">
+        <h2>Sesiones Activas</h2>
+        <div id="sessions-list"></div>
+      </div>
+
       <!-- API Docs Section -->
       <div id="section-docs" class="section hidden">
         <div class="docs-header">
@@ -233,6 +240,10 @@
           <div class="form-group">
             <label for="new-user-max">Max instancias</label>
             <input type="number" id="new-user-max" class="form-control" value="1" min="0">
+          </div>
+          <div class="form-group">
+            <label for="new-user-rate">Rate limit (req/s)</label>
+            <input type="number" id="new-user-rate" class="form-control" placeholder="Sin limite" min="0">
           </div>
           <div class="form-group full-width">
             <button type="submit" class="btn btn-primary">Crear Usuario</button>
@@ -365,6 +376,10 @@
         <div class="form-group">
           <label for="edit-user-max">Max instancias</label>
           <input type="number" id="edit-user-max" class="form-control" min="0">
+        </div>
+        <div class="form-group">
+          <label for="edit-user-rate">Rate limit (req/s, vacio = sin limite)</label>
+          <input type="number" id="edit-user-rate" class="form-control" min="0" placeholder="Sin limite">
         </div>
         <div class="form-group checkbox-group">
           <input type="checkbox" id="edit-user-active">

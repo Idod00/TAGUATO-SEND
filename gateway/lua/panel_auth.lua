@@ -41,6 +41,17 @@ if method == "POST" and uri == "/api/auth/login" then
     end
 
     local user = res[1]
+
+    -- Create session record
+    local ip = ngx.var.remote_addr or "unknown"
+    local ua = ngx.req.get_headers()["User-Agent"] or "unknown"
+    local token_hash = ngx.md5(user.api_token)
+    db.query(
+        [[INSERT INTO taguato.sessions (user_id, token_hash, ip_address, user_agent)
+          VALUES ($1, $2, $3, $4)]],
+        user.id, token_hash, ip, ua
+    )
+
     json.respond(200, {
         token = user.api_token,
         user = {

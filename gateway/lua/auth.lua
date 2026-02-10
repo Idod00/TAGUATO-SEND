@@ -13,7 +13,7 @@ if not token or token == "" then
 end
 
 local res, err = db.query(
-    "SELECT id, username, role, max_instances, is_active FROM taguato.users WHERE api_token = $1 LIMIT 1",
+    "SELECT id, username, role, max_instances, is_active, rate_limit FROM taguato.users WHERE api_token = $1 LIMIT 1",
     token
 )
 
@@ -35,4 +35,5 @@ ngx.ctx.user = {
     username = user.username,
     role = user.role,
     max_instances = user.max_instances,
+    rate_limit = user.rate_limit and tonumber(user.rate_limit) or nil,
 }

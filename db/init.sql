@@ -159,3 +159,26 @@ CREATE TABLE IF NOT EXISTS taguato.contact_list_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_contact_items_list ON taguato.contact_list_items(list_id);
+
+-- ============================================
+-- User rate limiting (per-user override)
+-- ============================================
+-- rate_limit column on users table (NULL = use global default)
+ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS rate_limit INT DEFAULT NULL;
+
+-- ============================================
+-- User sessions
+-- ============================================
+CREATE TABLE IF NOT EXISTS taguato.sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES taguato.users(id) ON DELETE CASCADE,
+    token_hash VARCHAR(64) NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    last_active TIMESTAMP DEFAULT NOW(),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON taguato.sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_token ON taguato.sessions(token_hash);

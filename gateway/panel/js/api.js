@@ -140,6 +140,23 @@ const API = (() => {
     return await request('DELETE', '/api/contacts/' + listId + '/items/' + itemId);
   }
 
+  // Sessions
+  async function listSessions() {
+    return await request('GET', '/api/sessions');
+  }
+
+  async function revokeSession(id) {
+    return await request('DELETE', '/api/sessions/' + id);
+  }
+
+  async function listAllSessions() {
+    return await request('GET', '/admin/sessions');
+  }
+
+  async function revokeAnySession(id) {
+    return await request('DELETE', '/admin/sessions/' + id);
+  }
+
   // Dashboard
   async function getDashboard() {
     return await request('GET', '/admin/dashboard');
@@ -190,13 +207,10 @@ const API = (() => {
     return await request('GET', '/admin/users');
   }
 
-  async function createUser(username, password, role, maxInstances) {
-    return await request('POST', '/admin/users', {
-      username,
-      password,
-      role,
-      max_instances: maxInstances,
-    });
+  async function createUser(username, password, role, maxInstances, rateLimit) {
+    const body = { username, password, role, max_instances: maxInstances };
+    if (rateLimit !== null && rateLimit !== undefined) body.rate_limit = rateLimit;
+    return await request('POST', '/admin/users', body);
   }
 
   async function updateUser(id, fields) {
@@ -277,6 +291,7 @@ const API = (() => {
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listContactLists, getContactList, createContactList, updateContactList, deleteContactList,
     addContactItems, deleteContactItem,
+    listSessions, revokeSession, listAllSessions, revokeAnySession,
     getDashboard,
     listUsers, createUser, updateUser, deleteUser,
     getPublicStatus, listIncidents, listIncidentServices,

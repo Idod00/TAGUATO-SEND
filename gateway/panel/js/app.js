@@ -69,6 +69,7 @@ const App = (() => {
     if (section === 'messages') loadMessageSection();
     if (section === 'templates') loadTemplates();
     if (section === 'contacts') loadContactLists();
+    if (section === 'sessions') loadSessions();
     if (section === 'docs') renderDocs();
     if (section === 'admin') loadUsers();
     if (section === 'status') loadStatusSection();
@@ -661,6 +662,65 @@ const App = (() => {
     }
   }
 
+  // --- Sessions ---
+  async function loadSessions() {
+    const list = $('#sessions-list');
+    list.innerHTML = '<div class="loading">Cargando sesiones...</div>';
+    try {
+      let sessions;
+      if (currentUser && currentUser.role === 'admin') {
+        const data = await API.listAllSessions();
+        sessions = data.sessions || [];
+      } else {
+        const data = await API.listSessions();
+        sessions = data.sessions || [];
+      }
+      if (sessions.length === 0) {
+        list.innerHTML = '<div class="empty">No hay sesiones activas</div>';
+        return;
+      }
+      const isAdmin = currentUser && currentUser.role === 'admin';
+      list.innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              ${isAdmin ? '<th>Usuario</th>' : ''}
+              <th>IP</th><th>User Agent</th><th>Ultima actividad</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sessions.map(s => `
+              <tr>
+                ${isAdmin ? '<td>' + esc(s.username || '') + '</td>' : ''}
+                <td>${esc(s.ip_address || '')}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s.user_agent || '')}</td>
+                <td>${formatDate(s.last_active)}</td>
+                <td>
+                  <button class="btn btn-sm btn-danger" onclick="App.revokeSessionAction(${s.id}, ${isAdmin})">Revocar</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+    } catch (err) {
+      list.innerHTML = '<div class="empty">Error al cargar sesiones</div>';
+    }
+  }
+
+  async function revokeSessionAction(id, isAdmin) {
+    if (!confirm('Revocar esta sesion?')) return;
+    try {
+      if (isAdmin) {
+        await API.revokeAnySession(id);
+      } else {
+        await API.revokeSession(id);
+      }
+      showToast('Sesion revocada');
+      loadSessions();
+    } catch (err) {
+      showToast(err.message || 'Error al revocar sesion', 'error');
+    }
+  }
+
   // --- Dashboard ---
   async function loadDashboard() {
     if (!currentUser || currentUser.role !== 'admin') return;
@@ -739,7 +799,7 @@ const App = (() => {
       <table class="table">
         <thead>
           <tr>
-            <th>ID</th><th>Usuario</th><th>Rol</th><th>Max Inst.</th><th>Activo</th><th>Acciones</th>
+            <th>ID</th><th>Usuario</th><th>Rol</th><th>Max Inst.</th><th>Rate Limit</th><th>Activo</th><th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -749,9 +809,10 @@ const App = (() => {
               <td>${esc(u.username)}</td>
               <td><span class="badge badge-${u.role === 'admin' ? 'admin' : 'user'}">${u.role}</span></td>
               <td>${u.max_instances}</td>
+              <td>${u.rate_limit ? u.rate_limit + '/s' : '-'}</td>
               <td>${u.is_active ? 'Si' : 'No'}</td>
               <td>
-                <button class="btn btn-sm btn-secondary" onclick="App.editUser(${u.id}, '${esc(u.username)}', '${u.role}', ${u.max_instances}, ${u.is_active})">Editar</button>
+                <button class="btn btn-sm btn-secondary" onclick="App.editUser(${u.id}, '${esc(u.username)}', '${u.role}', ${u.max_instances}, ${u.is_active}, ${u.rate_limit || 'null'})">Editar</button>
                 ${u.id !== currentUser.id ? `<button class="btn btn-sm btn-danger" onclick="App.confirmDeleteUser(${u.id}, '${esc(u.username)}')">Eliminar</button>` : ''}
               </td>
             </tr>`).join('')}
@@ -765,28 +826,32 @@ const App = (() => {
     const password = $('#new-user-pass').value.trim();
     const role = $('#new-user-role').value;
     const maxInst = parseInt($('#new-user-max').value) || 1;
+    const rateVal = $('#new-user-rate').value.trim();
+    const rateLimit = rateVal ? parseInt(rateVal) : null;
     if (!username || !password) {
       showToast('Username y password son requeridos', 'error');
       return;
     }
     try {
-      await API.createUser(username, password, role, maxInst);
+      await API.createUser(username, password, role, maxInst, rateLimit);
       showToast('Usuario creado');
       $('#new-user-name').value = '';
       $('#new-user-pass').value = '';
       $('#new-user-max').value = '1';
+      $('#new-user-rate').value = '';
       loadUsers();
     } catch (err) {
       showToast(err.message || 'Error al crear usuario', 'error');
     }
   }
 
-  function editUser(id, username, role, maxInstances, isActive) {
+  function editUser(id, username, role, maxInstances, isActive, rateLimit) {
     const modal = $('#edit-user-modal');
     $('#edit-user-id').value = id;
     $('#edit-user-title').textContent = 'Editar: ' + username;
     $('#edit-user-role').value = role;
     $('#edit-user-max').value = maxInstances;
+    $('#edit-user-rate').value = rateLimit || '';
     $('#edit-user-active').checked = isActive;
     $('#edit-user-pass').value = '';
     show(modal);
@@ -795,10 +860,12 @@ const App = (() => {
   async function handleUpdateUser(e) {
     e.preventDefault();
     const id = $('#edit-user-id').value;
+    const rateVal = $('#edit-user-rate').value.trim();
     const fields = {
       role: $('#edit-user-role').value,
       max_instances: parseInt($('#edit-user-max').value) || 1,
       is_active: $('#edit-user-active').checked,
+      rate_limit: rateVal ? parseInt(rateVal) : null,
     };
     const newPass = $('#edit-user-pass').value.trim();
     if (newPass) fields.password = newPass;
@@ -1357,6 +1424,7 @@ const App = (() => {
     removeContactItem,
     openLoadContactsModal,
     loadContactsIntoNumbers,
+    revokeSessionAction,
     editUser,
     confirmDeleteUser,
     openIncidentUpdate,
