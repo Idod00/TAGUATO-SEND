@@ -42,6 +42,10 @@ if method == "POST" and uri == "/api/auth/login" then
 
     local user = res[1]
 
+    -- Audit log
+    local audit = require "audit"
+    audit.log(user.id, user.username, "user_login", "session", nil, nil, ngx.var.remote_addr)
+
     -- Create session record
     local ip = ngx.var.remote_addr or "unknown"
     local ua = ngx.req.get_headers()["User-Agent"] or "unknown"

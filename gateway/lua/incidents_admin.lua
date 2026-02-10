@@ -132,6 +132,11 @@ if method == "POST" and uri == "/admin/incidents" then
         end
     end
 
+    -- Audit log
+    local audit = require "audit"
+    audit.log(user.id, user.username, "incident_created", "incident", tostring(incident.id),
+        { title = incident.title, severity = incident.severity }, ngx.var.remote_addr)
+
     json.respond(201, { incident = incident })
     return
 end
@@ -252,6 +257,11 @@ if method == "DELETE" and incident_id and uri:match("^/admin/incidents/%d+$") th
         json.respond(404, { error = "Incident not found" })
         return
     end
+    -- Audit log
+    local audit = require "audit"
+    audit.log(user.id, user.username, "incident_deleted", "incident", incident_id,
+        { title = res[1].title }, ngx.var.remote_addr)
+
     json.respond(200, { deleted = res[1] })
     return
 end

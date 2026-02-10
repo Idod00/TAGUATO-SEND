@@ -99,6 +99,11 @@ if method == "POST" and uri == "/admin/maintenance" then
         end
     end
 
+    -- Audit log
+    local audit = require "audit"
+    audit.log(user.id, user.username, "maintenance_created", "maintenance", tostring(maintenance.id),
+        { title = maintenance.title }, ngx.var.remote_addr)
+
     json.respond(201, { maintenance = maintenance })
     return
 end
@@ -195,6 +200,11 @@ if method == "DELETE" and maint_id then
         json.respond(404, { error = "Maintenance not found" })
         return
     end
+    -- Audit log
+    local audit = require "audit"
+    audit.log(user.id, user.username, "maintenance_deleted", "maintenance", maint_id,
+        { title = res[1].title }, ngx.var.remote_addr)
+
     json.respond(200, { deleted = res[1] })
     return
 end

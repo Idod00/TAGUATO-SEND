@@ -73,6 +73,8 @@
         <a href="#" class="nav-link" data-section="docs">API Docs</a>
         <a href="#" class="nav-link hidden" id="nav-status" data-section="status">Status</a>
         <a href="#" class="nav-link hidden" id="nav-admin" data-section="admin">Admin</a>
+        <a href="#" class="nav-link hidden" id="nav-audit" data-section="audit">Auditoria</a>
+        <a href="#" class="nav-link hidden" id="nav-backup" data-section="backup">Backups</a>
       </nav>
       <div class="sidebar-footer">
         <button id="btn-theme-toggle" class="theme-toggle" title="Cambiar tema">Tema</button>
@@ -321,6 +323,47 @@
         </form>
 
         <div id="users-list"></div>
+      </div>
+
+      <!-- Audit Section (admin only) -->
+      <div id="section-audit" class="section hidden">
+        <h2>Auditoria</h2>
+        <div class="admin-create-form" style="grid-template-columns:repeat(3,1fr);margin-bottom:1rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="audit-action">Accion</label>
+            <select id="audit-action" class="form-control">
+              <option value="">Todas</option>
+              <option value="user_created">user_created</option>
+              <option value="user_updated">user_updated</option>
+              <option value="user_deleted">user_deleted</option>
+              <option value="user_login">user_login</option>
+              <option value="incident_created">incident_created</option>
+              <option value="incident_deleted">incident_deleted</option>
+              <option value="maintenance_created">maintenance_created</option>
+              <option value="maintenance_deleted">maintenance_deleted</option>
+              <option value="backup_created">backup_created</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="audit-username">Usuario</label>
+            <input type="text" id="audit-username" class="form-control" placeholder="Todos">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>&nbsp;</label>
+            <button type="button" id="audit-filter-btn" class="btn btn-primary btn-sm" style="width:100%;">Filtrar</button>
+          </div>
+        </div>
+        <div id="audit-list"></div>
+        <div id="audit-pagination" style="margin-top:0.75rem;display:flex;gap:0.5rem;justify-content:center;"></div>
+      </div>
+
+      <!-- Backup Section (admin only) -->
+      <div id="section-backup" class="section hidden">
+        <h2>Backups de Base de Datos</h2>
+        <div style="margin-bottom:1rem;">
+          <button id="backup-create-btn" class="btn btn-primary">Crear Backup Ahora</button>
+        </div>
+        <div id="backup-list"></div>
       </div>
 
       <!-- Status Section (admin only) -->

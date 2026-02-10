@@ -181,6 +181,21 @@ const API = (() => {
     return await request('GET', '/api/messages/log' + (qs ? '?' + qs : ''));
   }
 
+  // Audit
+  async function getAuditLogs(params) {
+    const qs = new URLSearchParams(params).toString();
+    return await request('GET', '/admin/audit' + (qs ? '?' + qs : ''));
+  }
+
+  // Backup
+  async function listBackups() {
+    return await request('GET', '/admin/backup');
+  }
+
+  async function createBackup() {
+    return await request('POST', '/admin/backup');
+  }
+
   // Dashboard
   async function getDashboard() {
     return await request('GET', '/admin/dashboard');
@@ -317,6 +332,7 @@ const API = (() => {
     listContactLists, getContactList, createContactList, updateContactList, deleteContactList,
     addContactItems, deleteContactItem,
     listSessions, revokeSession, listAllSessions, revokeAnySession,
+    getAuditLogs, listBackups, createBackup,
     getDashboard,
     listUsers, createUser, updateUser, deleteUser,
     getPublicStatus, listIncidents, listIncidentServices,

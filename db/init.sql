@@ -199,3 +199,37 @@ CREATE TABLE IF NOT EXISTS taguato.message_logs (
 
 CREATE INDEX IF NOT EXISTS idx_message_logs_user ON taguato.message_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_message_logs_created ON taguato.message_logs(created_at DESC);
+
+-- ============================================
+-- Audit log
+-- ============================================
+CREATE TABLE IF NOT EXISTS taguato.audit_log (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES taguato.users(id) ON DELETE SET NULL,
+    username VARCHAR(100),
+    action VARCHAR(50) NOT NULL,
+    resource_type VARCHAR(50),
+    resource_id VARCHAR(100),
+    details JSONB,
+    ip_address VARCHAR(45),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON taguato.audit_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_user ON taguato.audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_action ON taguato.audit_log(action);
+
+-- ============================================
+-- Reconnect log
+-- ============================================
+CREATE TABLE IF NOT EXISTS taguato.reconnect_log (
+    id SERIAL PRIMARY KEY,
+    instance_name VARCHAR(255) NOT NULL,
+    previous_state VARCHAR(50),
+    action VARCHAR(50),
+    result VARCHAR(50),
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_reconnect_log_created ON taguato.reconnect_log(created_at DESC);

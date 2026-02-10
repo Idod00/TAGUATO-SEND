@@ -76,6 +76,11 @@ if method == "POST" and uri == "/admin/users" then
         return
     end
 
+    -- Audit log
+    local audit = require "audit"
+    audit.log(user.id, user.username, "user_created", "user", tostring(res[1].id),
+        { username = res[1].username, role = res[1].role }, ngx.var.remote_addr)
+
     json.respond(201, { user = res[1] })
     return
 end
@@ -199,6 +204,10 @@ if method == "PUT" and user_id then
         return
     end
 
+    -- Audit log
+    local audit = require "audit"
+    audit.log(user.id, user.username, "user_updated", "user", user_id, body, ngx.var.remote_addr)
+
     json.respond(200, { user = res[1] })
     return
 end
@@ -220,6 +229,11 @@ if method == "DELETE" and user_id then
         json.respond(404, { error = "User not found" })
         return
     end
+
+    -- Audit log
+    local audit = require "audit"
+    audit.log(user.id, user.username, "user_deleted", "user", user_id,
+        { username = res[1].username }, ngx.var.remote_addr)
 
     json.respond(200, { deleted = res[1] })
     return

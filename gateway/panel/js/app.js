@@ -7,6 +7,7 @@ const App = (() => {
   let cachedContactLists = [];
   let currentMsgType = 'text';
   let historyPage = 1;
+  let auditPage = 1;
 
   // --- Helpers ---
   function $(sel) { return document.querySelector(sel); }
@@ -75,6 +76,8 @@ const App = (() => {
     if (section === 'sessions') loadSessions();
     if (section === 'docs') renderDocs();
     if (section === 'admin') loadUsers();
+    if (section === 'audit') { auditPage = 1; loadAuditLogs(); }
+    if (section === 'backup') loadBackups();
     if (section === 'status') loadStatusSection();
   }
 
@@ -169,14 +172,20 @@ const App = (() => {
     const adminNav = $('#nav-admin');
     const statusNav = $('#nav-status');
     const dashboardNav = $('#nav-dashboard');
+    const auditNav = $('#nav-audit');
+    const backupNav = $('#nav-backup');
     if (currentUser.role === 'admin') {
       show(adminNav);
       show(statusNav);
       show(dashboardNav);
+      show(auditNav);
+      show(backupNav);
     } else {
       hide(adminNav);
       hide(statusNav);
       hide(dashboardNav);
+      hide(auditNav);
+      hide(backupNav);
     }
     navigate(currentUser.role === 'admin' ? 'dashboard' : 'instances');
   }
@@ -914,8 +923,128 @@ const App = (() => {
             </div>`;
         }).join('');
       }
+      // Reconnections
+      const reconnections = data.recent_reconnections || [];
+      if (reconnections.length > 0) {
+        activityContainer.innerHTML += `
+          <div style="margin-top:1rem;padding-top:0.75rem;border-top:1px solid var(--border);">
+            <div style="font-size:0.85rem;font-weight:600;color:var(--text-light);margin-bottom:0.5rem;">Reconexiones Recientes</div>
+            ${reconnections.map(r => `
+              <div class="recent-activity-item">
+                <div class="activity-icon ${r.result === 'reconnected' ? 'activity-icon-instance' : 'activity-icon-user'}">R</div>
+                <div class="activity-name">${esc(r.instance_name)} <span style="color:var(--text-light);font-size:0.75rem;">(${esc(r.result)})</span></div>
+                <div class="activity-time">${formatDate(r.created_at)}</div>
+              </div>`).join('')}
+          </div>`;
+      }
     } catch (err) {
       cardsContainer.innerHTML = '<div class="empty">Error al cargar dashboard</div>';
+    }
+  }
+
+  // --- Audit ---
+  async function loadAuditLogs() {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    const list = $('#audit-list');
+    const pagination = $('#audit-pagination');
+    list.innerHTML = '<div class="loading">Cargando auditoria...</div>';
+    pagination.innerHTML = '';
+
+    const params = { page: auditPage, limit: 50 };
+    const action = $('#audit-action').value;
+    const username = $('#audit-username').value.trim();
+    if (action) params.action = action;
+    if (username) params.username = username;
+
+    try {
+      const data = await API.getAuditLogs(params);
+      const logs = data.logs || [];
+      if (logs.length === 0) {
+        list.innerHTML = '<div class="empty">No hay registros de auditoria</div>';
+        return;
+      }
+
+      list.innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Usuario</th><th>Accion</th><th>Recurso</th><th>IP</th><th>Detalles</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logs.map(l => `
+              <tr>
+                <td>${formatDate(l.created_at)}</td>
+                <td>${esc(l.username || '-')}</td>
+                <td><span class="badge badge-user">${esc(l.action)}</span></td>
+                <td>${esc(l.resource_type || '')} ${l.resource_id ? '#' + esc(l.resource_id) : ''}</td>
+                <td>${esc(l.ip_address || '')}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.details ? esc(JSON.stringify(l.details)) : ''}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+
+      if (data.pages > 1) {
+        let html = '';
+        for (let p = 1; p <= data.pages; p++) {
+          html += `<button class="btn btn-sm ${p === data.page ? 'btn-primary' : 'btn-secondary'}" onclick="App.goAuditPage(${p})">${p}</button>`;
+        }
+        pagination.innerHTML = html;
+      }
+    } catch (err) {
+      list.innerHTML = '<div class="empty">Error al cargar auditoria</div>';
+    }
+  }
+
+  function goAuditPage(page) {
+    auditPage = page;
+    loadAuditLogs();
+  }
+
+  // --- Backups ---
+  async function loadBackups() {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    const list = $('#backup-list');
+    list.innerHTML = '<div class="loading">Cargando backups...</div>';
+    try {
+      const data = await API.listBackups();
+      const backups = data.backups || [];
+      if (backups.length === 0) {
+        list.innerHTML = '<div class="empty">No hay backups disponibles</div>';
+        return;
+      }
+      list.innerHTML = `
+        <table class="table">
+          <thead>
+            <tr><th>Archivo</th><th>Tamano</th><th>Fecha</th></tr>
+          </thead>
+          <tbody>
+            ${backups.map(b => `
+              <tr>
+                <td>${esc(b.filename)}</td>
+                <td>${esc(b.size)}</td>
+                <td>${esc(b.date)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+    } catch (err) {
+      list.innerHTML = '<div class="empty">Error al cargar backups</div>';
+    }
+  }
+
+  async function handleCreateBackup() {
+    const btn = $('#backup-create-btn');
+    btn.disabled = true;
+    btn.textContent = 'Creando backup...';
+    try {
+      const data = await API.createBackup();
+      showToast('Backup creado: ' + data.filename);
+      loadBackups();
+    } catch (err) {
+      showToast(err.message || 'Error al crear backup', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Crear Backup Ahora';
     }
   }
 
@@ -1512,6 +1641,8 @@ const App = (() => {
     handleTemplateSelect('#msg-template', '#msg-text');
     handleTemplateSelect('#bulk-template', '#bulk-text');
     $('#hist-filter-btn').addEventListener('click', () => { historyPage = 1; loadHistory(); });
+    $('#audit-filter-btn').addEventListener('click', () => { auditPage = 1; loadAuditLogs(); });
+    $('#backup-create-btn').addEventListener('click', handleCreateBackup);
     $('#btn-theme-toggle').addEventListener('click', toggleTheme);
     $('#create-user-form').addEventListener('submit', handleCreateUser);
     $('#edit-user-form').addEventListener('submit', handleUpdateUser);
@@ -1571,6 +1702,7 @@ const App = (() => {
     setMsgType,
     goHistoryPage,
     revokeSessionAction,
+    goAuditPage,
     editUser,
     confirmDeleteUser,
     openIncidentUpdate,

@@ -114,6 +114,13 @@ while #recent_activity > 10 do
     recent_activity[#recent_activity] = nil
 end
 
+-- 6. Recent reconnections (last 5)
+local recent_reconnections = db.query([[
+    SELECT instance_name, previous_state, result, error_message, created_at
+    FROM taguato.reconnect_log
+    ORDER BY created_at DESC LIMIT 5
+]])
+
 json.respond(200, {
     users = users,
     instances = {
@@ -123,4 +130,5 @@ json.respond(200, {
     },
     uptime_30d = uptime_30d,
     recent_activity = as_array(recent_activity),
+    recent_reconnections = as_array(recent_reconnections),
 })
