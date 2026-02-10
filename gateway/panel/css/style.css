@@ -17,6 +17,86 @@
   --shadow: 0 1px 3px rgba(139,26,26,0.1);
 }
 
+/* Dark mode overrides */
+[data-theme="dark"] {
+  --bg: #1a1212;
+  --bg-card: #2a1e1e;
+  --text: #e8d8d8;
+  --text-light: #a89090;
+  --border: #3d2a2a;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+[data-theme="dark"] .login-box {
+  background: rgba(42,30,30,0.95);
+}
+
+[data-theme="dark"] .login-box h1 { color: #d4a0a0; }
+
+[data-theme="dark"] .docs-subtitle code,
+[data-theme="dark"] .docs-base-url code,
+[data-theme="dark"] .docs-params-table code,
+[data-theme="dark"] .incident-svc-tag {
+  background: #3d2a2a;
+  color: #d4a0a0;
+}
+
+[data-theme="dark"] .docs-group-header:hover { background: #3d2a2a; }
+[data-theme="dark"] .docs-endpoint-body { background: #251a1a; }
+[data-theme="dark"] .docs-endpoint-header:hover { background: rgba(255,255,255,0.03); }
+
+[data-theme="dark"] .badge-connected { background: #14532d; color: #86efac; }
+[data-theme="dark"] .badge-connecting { background: #713f12; color: #fde68a; }
+[data-theme="dark"] .badge-disconnected { background: #7f1d1d; color: #fca5a5; }
+[data-theme="dark"] .badge-admin { background: #3d1a1a; color: #d4a0a0; }
+[data-theme="dark"] .badge-user { background: #3d2a2a; color: #c4a0a0; }
+
+[data-theme="dark"] .badge-severity-minor { background: #713f12; color: #fde68a; }
+[data-theme="dark"] .badge-severity-major { background: #7c2d12; color: #fed7aa; }
+[data-theme="dark"] .badge-severity-critical { background: #7f1d1d; color: #fca5a5; }
+
+[data-theme="dark"] .badge-status-investigating { background: #7f1d1d; color: #fca5a5; }
+[data-theme="dark"] .badge-status-identified { background: #7c2d12; color: #fed7aa; }
+[data-theme="dark"] .badge-status-monitoring { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .badge-status-resolved { background: #14532d; color: #86efac; }
+
+[data-theme="dark"] .badge-maint-scheduled { background: #1e3a5f; color: #93c5fd; }
+[data-theme="dark"] .badge-maint-in_progress { background: #7c2d12; color: #fed7aa; }
+[data-theme="dark"] .badge-maint-completed { background: #14532d; color: #86efac; }
+
+[data-theme="dark"] .activity-icon-user { background: #3d1a1a; color: #d4a0a0; }
+[data-theme="dark"] .activity-icon-instance { background: #14532d; color: #86efac; }
+
+[data-theme="dark"] .docs-auth-note { background: #3d2a1a; border-color: #5c3d1a; color: #fde68a; }
+
+[data-theme="dark"] .btn-secondary { background: #3d2a2a; color: var(--text); }
+[data-theme="dark"] .btn-secondary:hover:not(:disabled) { background: #4d3535; }
+
+[data-theme="dark"] .table th { background: #1a1212; }
+
+[data-theme="dark"] .modal { background: rgba(0,0,0,0.6); }
+
+/* Dark mode toggle */
+.theme-toggle {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  line-height: 1;
+  transition: background 0.15s, color 0.15s;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.theme-toggle:hover { background: rgba(255,255,255,0.08); color: #fff; }
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {

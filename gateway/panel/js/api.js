@@ -94,6 +94,52 @@ const API = (() => {
     });
   }
 
+  // Templates
+  async function listTemplates() {
+    return await request('GET', '/api/templates');
+  }
+
+  async function createTemplate(name, content) {
+    return await request('POST', '/api/templates', { name, content });
+  }
+
+  async function updateTemplate(id, fields) {
+    return await request('PUT', '/api/templates/' + id, fields);
+  }
+
+  async function deleteTemplate(id) {
+    return await request('DELETE', '/api/templates/' + id);
+  }
+
+  // Contacts
+  async function listContactLists() {
+    return await request('GET', '/api/contacts');
+  }
+
+  async function getContactList(id) {
+    return await request('GET', '/api/contacts/' + id);
+  }
+
+  async function createContactList(name) {
+    return await request('POST', '/api/contacts', { name });
+  }
+
+  async function updateContactList(id, name) {
+    return await request('PUT', '/api/contacts/' + id, { name });
+  }
+
+  async function deleteContactList(id) {
+    return await request('DELETE', '/api/contacts/' + id);
+  }
+
+  async function addContactItems(listId, items) {
+    return await request('POST', '/api/contacts/' + listId + '/items', { items });
+  }
+
+  async function deleteContactItem(listId, itemId) {
+    return await request('DELETE', '/api/contacts/' + listId + '/items/' + itemId);
+  }
+
   // Dashboard
   async function getDashboard() {
     return await request('GET', '/admin/dashboard');
@@ -228,6 +274,9 @@ const API = (() => {
     login, logout, getProfile, changePassword,
     fetchInstances, createInstance, deleteInstance, connectInstance, getInstanceStatus,
     sendText, sendBulkText, cancelBulk,
+    listTemplates, createTemplate, updateTemplate, deleteTemplate,
+    listContactLists, getContactList, createContactList, updateContactList, deleteContactList,
+    addContactItems, deleteContactItem,
     getDashboard,
     listUsers, createUser, updateUser, deleteUser,
     getPublicStatus, listIncidents, listIncidentServices,

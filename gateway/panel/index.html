@@ -66,12 +66,15 @@
         <a href="#" class="nav-link hidden" id="nav-dashboard" data-section="dashboard">Dashboard</a>
         <a href="#" class="nav-link active" data-section="instances">Instancias</a>
         <a href="#" class="nav-link" data-section="messages">Mensajes</a>
+        <a href="#" class="nav-link" data-section="templates">Plantillas</a>
+        <a href="#" class="nav-link" data-section="contacts">Contactos</a>
         <a href="#" class="nav-link" data-section="docs">API Docs</a>
         <a href="#" class="nav-link hidden" id="nav-status" data-section="status">Status</a>
         <a href="#" class="nav-link hidden" id="nav-admin" data-section="admin">Admin</a>
       </nav>
       <div class="sidebar-footer">
-        <button id="btn-logout" class="btn btn-ghost btn-sm">Cerrar sesion</button>
+        <button id="btn-theme-toggle" class="theme-toggle" title="Cambiar tema">Tema</button>
+        <button id="btn-logout" class="btn btn-ghost btn-sm" style="margin-top:0.4rem;">Cerrar sesion</button>
       </div>
     </aside>
 
@@ -111,6 +114,12 @@
             <input type="text" id="msg-number" class="form-control" placeholder="595981123456" required>
           </div>
           <div class="form-group">
+            <label for="msg-template">Plantilla (opcional)</label>
+            <select id="msg-template" class="form-control">
+              <option value="">Sin plantilla</option>
+            </select>
+          </div>
+          <div class="form-group">
             <label for="msg-text">Mensaje</label>
             <textarea id="msg-text" class="form-control" rows="4" required></textarea>
           </div>
@@ -130,7 +139,16 @@
           <div class="form-group">
             <label for="bulk-numbers">Numeros (uno por linea)</label>
             <textarea id="bulk-numbers" class="form-control" rows="5" placeholder="595981123456&#10;595982654321&#10;595983111222" required></textarea>
-            <div class="bulk-hint">Maximo 500 numeros</div>
+            <div class="bulk-hint" style="display:flex;align-items:center;justify-content:space-between;">
+              <span>Maximo 500 numeros</span>
+              <button type="button" id="bulk-load-contacts-btn" class="btn btn-sm btn-secondary">Cargar lista</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="bulk-template">Plantilla (opcional)</label>
+            <select id="bulk-template" class="form-control">
+              <option value="">Sin plantilla</option>
+            </select>
           </div>
           <div class="form-group">
             <label for="bulk-text">Mensaje</label>
@@ -148,6 +166,35 @@
           <div id="bulk-results" class="bulk-results"></div>
           <div id="bulk-failed-details"></div>
         </div>
+      </div>
+
+      <!-- Templates Section -->
+      <div id="section-templates" class="section hidden">
+        <h2>Plantillas de Mensajes</h2>
+        <form id="create-template-form" class="admin-create-form" style="grid-template-columns:1fr 2fr;">
+          <div class="form-group">
+            <label for="new-tpl-name">Nombre</label>
+            <input type="text" id="new-tpl-name" class="form-control" placeholder="Ej: Saludo" required>
+          </div>
+          <div class="form-group">
+            <label for="new-tpl-content">Contenido</label>
+            <textarea id="new-tpl-content" class="form-control" rows="2" placeholder="Hola, te escribo para..." required></textarea>
+          </div>
+          <div class="form-group full-width">
+            <button type="submit" class="btn btn-primary">Crear Plantilla</button>
+          </div>
+        </form>
+        <div id="templates-list"></div>
+      </div>
+
+      <!-- Contacts Section -->
+      <div id="section-contacts" class="section hidden">
+        <h2>Listas de Contactos</h2>
+        <form id="create-contact-list-form" class="inline-form">
+          <input type="text" id="new-list-name" class="form-control" placeholder="Nombre de la lista" required>
+          <button type="submit" class="btn btn-primary">Crear Lista</button>
+        </form>
+        <div id="contact-lists-container"></div>
       </div>
 
       <!-- API Docs Section -->
@@ -354,6 +401,15 @@
         </div>
         <button type="submit" class="btn btn-primary">Agregar Update</button>
       </form>
+    </div>
+  </div>
+
+  <!-- Load Contacts Modal -->
+  <div id="load-contacts-modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" title="Cerrar">&times;</button>
+      <h3>Cargar Lista de Contactos</h3>
+      <div id="load-contacts-list"></div>
     </div>
   </div>
 

@@ -3,6 +3,8 @@ const App = (() => {
   let currentUser = null;
   let instances = [];
   let dashboardTimer = null;
+  let cachedTemplates = [];
+  let cachedContactLists = [];
 
   // --- Helpers ---
   function $(sel) { return document.querySelector(sel); }
@@ -17,6 +19,34 @@ const App = (() => {
     toast.className = 'toast toast-' + type;
     show(toast);
     setTimeout(() => hide(toast), 3500);
+  }
+
+  // --- Dark Mode ---
+  function initTheme() {
+    const saved = localStorage.getItem('taguato_theme');
+    if (saved === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+    updateThemeButton();
+  }
+
+  function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    if (current === 'dark') {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('taguato_theme', 'light');
+    } else {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      localStorage.setItem('taguato_theme', 'dark');
+    }
+    updateThemeButton();
+  }
+
+  function updateThemeButton() {
+    const btn = $('#btn-theme-toggle');
+    if (!btn) return;
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    btn.textContent = isDark ? 'Tema Claro' : 'Tema Oscuro';
   }
 
   // --- Navigation ---
@@ -37,6 +67,8 @@ const App = (() => {
     }
     if (section === 'instances') loadInstances();
     if (section === 'messages') loadMessageSection();
+    if (section === 'templates') loadTemplates();
+    if (section === 'contacts') loadContactLists();
     if (section === 'docs') renderDocs();
     if (section === 'admin') loadUsers();
     if (section === 'status') loadStatusSection();
@@ -244,6 +276,7 @@ const App = (() => {
   // --- Messages ---
   function loadMessageSection() {
     loadInstanceSelect();
+    loadTemplateSelects();
     // Reset bulk progress on section load
     hide($('#bulk-progress-zone'));
   }
@@ -362,6 +395,269 @@ const App = (() => {
       btn.disabled = false;
       btn.textContent = 'Enviar Masivo';
       cancelBtn.disabled = true;
+    }
+  }
+
+  // --- Templates ---
+  async function loadTemplates() {
+    const list = $('#templates-list');
+    list.innerHTML = '<div class="loading">Cargando plantillas...</div>';
+    try {
+      const data = await API.listTemplates();
+      cachedTemplates = data.templates || [];
+      renderTemplates();
+    } catch (err) {
+      list.innerHTML = '<div class="empty">Error al cargar plantillas</div>';
+    }
+  }
+
+  function renderTemplates() {
+    const list = $('#templates-list');
+    if (cachedTemplates.length === 0) {
+      list.innerHTML = '<div class="empty">No hay plantillas. Crea una nueva.</div>';
+      return;
+    }
+    list.innerHTML = cachedTemplates.map(t => `
+      <div class="card instance-card" style="flex-direction:column;align-items:stretch;gap:0.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <h3 style="font-size:0.95rem;">${esc(t.name)}</h3>
+          <div class="instance-actions">
+            <button class="btn btn-sm btn-secondary" onclick="App.editTemplate(${t.id}, '${esc(t.name).replace(/'/g, "\\'")}')">Editar</button>
+            <button class="btn btn-sm btn-danger" onclick="App.confirmDeleteTemplate(${t.id}, '${esc(t.name).replace(/'/g, "\\'")}')">Eliminar</button>
+          </div>
+        </div>
+        <div style="font-size:0.85rem;color:var(--text-light);white-space:pre-wrap;">${esc(t.content)}</div>
+      </div>
+    `).join('');
+  }
+
+  async function handleCreateTemplate(e) {
+    e.preventDefault();
+    const name = $('#new-tpl-name').value.trim();
+    const content = $('#new-tpl-content').value.trim();
+    if (!name || !content) return;
+    try {
+      await API.createTemplate(name, content);
+      showToast('Plantilla creada');
+      $('#new-tpl-name').value = '';
+      $('#new-tpl-content').value = '';
+      loadTemplates();
+    } catch (err) {
+      showToast(err.message || 'Error al crear plantilla', 'error');
+    }
+  }
+
+  function editTemplate(id, name) {
+    const tpl = cachedTemplates.find(t => t.id === id);
+    if (!tpl) return;
+    const newName = prompt('Nombre:', tpl.name);
+    if (newName === null) return;
+    const newContent = prompt('Contenido:', tpl.content);
+    if (newContent === null) return;
+    API.updateTemplate(id, { name: newName, content: newContent })
+      .then(() => { showToast('Plantilla actualizada'); loadTemplates(); })
+      .catch(err => showToast(err.message || 'Error', 'error'));
+  }
+
+  function confirmDeleteTemplate(id, name) {
+    if (confirm('Eliminar plantilla "' + name + '"?')) {
+      API.deleteTemplate(id)
+        .then(() => { showToast('Plantilla eliminada'); loadTemplates(); })
+        .catch(err => showToast(err.message || 'Error', 'error'));
+    }
+  }
+
+  async function loadTemplateSelects() {
+    try {
+      const data = await API.listTemplates();
+      cachedTemplates = data.templates || [];
+    } catch { cachedTemplates = []; }
+
+    const selectors = ['#msg-template', '#bulk-template'];
+    selectors.forEach(selId => {
+      const sel = $(selId);
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Sin plantilla</option>';
+      cachedTemplates.forEach(t => {
+        sel.innerHTML += `<option value="${t.id}">${esc(t.name)}</option>`;
+      });
+    });
+  }
+
+  function handleTemplateSelect(selectId, textareaId) {
+    const sel = $(selectId);
+    if (!sel) return;
+    sel.addEventListener('change', () => {
+      const tpl = cachedTemplates.find(t => t.id === parseInt(sel.value));
+      if (tpl) {
+        $(textareaId).value = tpl.content;
+      }
+    });
+  }
+
+  // --- Contacts ---
+  async function loadContactLists() {
+    const container = $('#contact-lists-container');
+    container.innerHTML = '<div class="loading">Cargando listas...</div>';
+    try {
+      const data = await API.listContactLists();
+      cachedContactLists = data.lists || [];
+      renderContactLists();
+    } catch (err) {
+      container.innerHTML = '<div class="empty">Error al cargar listas</div>';
+    }
+  }
+
+  function renderContactLists() {
+    const container = $('#contact-lists-container');
+    if (cachedContactLists.length === 0) {
+      container.innerHTML = '<div class="empty">No hay listas de contactos. Crea una nueva.</div>';
+      return;
+    }
+    container.innerHTML = cachedContactLists.map(cl => `
+      <div class="card instance-card">
+        <div class="instance-info">
+          <h3>${esc(cl.name)}</h3>
+          <span class="badge badge-user">${cl.item_count || 0} contactos</span>
+        </div>
+        <div class="instance-actions">
+          <button class="btn btn-sm btn-primary" onclick="App.viewContactList(${cl.id})">Ver</button>
+          <button class="btn btn-sm btn-secondary" onclick="App.renameContactList(${cl.id}, '${esc(cl.name).replace(/'/g, "\\'")}')">Renombrar</button>
+          <button class="btn btn-sm btn-danger" onclick="App.confirmDeleteContactList(${cl.id}, '${esc(cl.name).replace(/'/g, "\\'")}')">Eliminar</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  async function handleCreateContactList(e) {
+    e.preventDefault();
+    const name = $('#new-list-name').value.trim();
+    if (!name) return;
+    try {
+      await API.createContactList(name);
+      showToast('Lista creada');
+      $('#new-list-name').value = '';
+      loadContactLists();
+    } catch (err) {
+      showToast(err.message || 'Error al crear lista', 'error');
+    }
+  }
+
+  async function viewContactList(id) {
+    const container = $('#contact-lists-container');
+    container.innerHTML = '<div class="loading">Cargando contactos...</div>';
+    try {
+      const data = await API.getContactList(id);
+      const list = data.list;
+      const items = list.items || [];
+      container.innerHTML = `
+        <div style="margin-bottom:1rem;">
+          <button class="btn btn-sm btn-secondary" onclick="App.loadContactLists()">Volver a listas</button>
+          <h3 style="display:inline;margin-left:0.5rem;">${esc(list.name)}</h3>
+        </div>
+        <form id="add-contact-form" class="inline-form" style="margin-bottom:1rem;">
+          <input type="text" id="add-contact-phone" class="form-control" placeholder="595981123456" required>
+          <input type="text" id="add-contact-label" class="form-control" placeholder="Etiqueta (opcional)">
+          <button type="submit" class="btn btn-primary">Agregar</button>
+        </form>
+        <div id="contact-items-list">
+          ${items.length === 0 ? '<div class="empty">Lista vacia. Agrega contactos.</div>' :
+            '<table class="table"><thead><tr><th>Numero</th><th>Etiqueta</th><th>Acciones</th></tr></thead><tbody>' +
+            items.map(item => `
+              <tr>
+                <td>${esc(item.phone_number)}</td>
+                <td>${esc(item.label || '')}</td>
+                <td><button class="btn btn-sm btn-danger" onclick="App.removeContactItem(${list.id}, ${item.id})">Quitar</button></td>
+              </tr>`).join('') +
+            '</tbody></table>'}
+        </div>`;
+      // Bind add contact form
+      const addForm = $('#add-contact-form');
+      if (addForm) {
+        addForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const phone = $('#add-contact-phone').value.trim();
+          if (!phone) return;
+          const label = $('#add-contact-label').value.trim();
+          try {
+            await API.addContactItems(list.id, [{ phone_number: phone, label }]);
+            showToast('Contacto agregado');
+            viewContactList(list.id);
+          } catch (err) {
+            showToast(err.message || 'Error', 'error');
+          }
+        });
+      }
+    } catch (err) {
+      container.innerHTML = '<div class="empty">Error al cargar lista</div>';
+    }
+  }
+
+  function renameContactList(id, currentName) {
+    const newName = prompt('Nuevo nombre:', currentName);
+    if (!newName || newName === currentName) return;
+    API.updateContactList(id, newName)
+      .then(() => { showToast('Lista renombrada'); loadContactLists(); })
+      .catch(err => showToast(err.message || 'Error', 'error'));
+  }
+
+  function confirmDeleteContactList(id, name) {
+    if (confirm('Eliminar lista "' + name + '" y todos sus contactos?')) {
+      API.deleteContactList(id)
+        .then(() => { showToast('Lista eliminada'); loadContactLists(); })
+        .catch(err => showToast(err.message || 'Error', 'error'));
+    }
+  }
+
+  async function removeContactItem(listId, itemId) {
+    try {
+      await API.deleteContactItem(listId, itemId);
+      showToast('Contacto eliminado');
+      viewContactList(listId);
+    } catch (err) {
+      showToast(err.message || 'Error', 'error');
+    }
+  }
+
+  async function openLoadContactsModal() {
+    const list = $('#load-contacts-list');
+    list.innerHTML = '<div class="loading">Cargando listas...</div>';
+    show($('#load-contacts-modal'));
+    try {
+      const data = await API.listContactLists();
+      const lists = data.lists || [];
+      if (lists.length === 0) {
+        list.innerHTML = '<div class="empty">No hay listas de contactos</div>';
+        return;
+      }
+      list.innerHTML = lists.map(cl => `
+        <div class="card instance-card" style="cursor:pointer;" onclick="App.loadContactsIntoNumbers(${cl.id})">
+          <div class="instance-info">
+            <h3>${esc(cl.name)}</h3>
+            <span class="badge badge-user">${cl.item_count || 0} contactos</span>
+          </div>
+        </div>
+      `).join('');
+    } catch {
+      list.innerHTML = '<div class="empty">Error al cargar listas</div>';
+    }
+  }
+
+  async function loadContactsIntoNumbers(listId) {
+    try {
+      const data = await API.getContactList(listId);
+      const items = data.list.items || [];
+      const numbers = items.map(i => i.phone_number).join('\n');
+      const textarea = $('#bulk-numbers');
+      if (textarea.value.trim()) {
+        textarea.value += '\n' + numbers;
+      } else {
+        textarea.value = numbers;
+      }
+      closeModal('load-contacts-modal');
+      showToast(items.length + ' contactos cargados');
+    } catch (err) {
+      showToast(err.message || 'Error al cargar contactos', 'error');
     }
   }
 
@@ -1000,12 +1296,19 @@ const App = (() => {
       $('#bulk-cancel-btn').disabled = true;
       $('#bulk-cancel-btn').textContent = 'Cancelando...';
     });
+    $('#create-template-form').addEventListener('submit', handleCreateTemplate);
+    $('#create-contact-list-form').addEventListener('submit', handleCreateContactList);
+    $('#bulk-load-contacts-btn').addEventListener('click', openLoadContactsModal);
+    handleTemplateSelect('#msg-template', '#msg-text');
+    handleTemplateSelect('#bulk-template', '#bulk-text');
+    $('#btn-theme-toggle').addEventListener('click', toggleTheme);
     $('#create-user-form').addEventListener('submit', handleCreateUser);
     $('#edit-user-form').addEventListener('submit', handleUpdateUser);
     $('#create-incident-form').addEventListener('submit', handleCreateIncident);
     $('#incident-update-form').addEventListener('submit', handleIncidentUpdate);
     $('#create-maintenance-form').addEventListener('submit', handleCreateMaintenance);
     $('#btn-logout').addEventListener('click', logout);
+    initTheme();
 
     $$('.nav-link').forEach(link => {
       link.addEventListener('click', (e) => {
@@ -1045,6 +1348,15 @@ const App = (() => {
   return {
     connectInstance,
     confirmDeleteInstance,
+    editTemplate,
+    confirmDeleteTemplate,
+    loadContactLists,
+    viewContactList,
+    renameContactList,
+    confirmDeleteContactList,
+    removeContactItem,
+    openLoadContactsModal,
+    loadContactsIntoNumbers,
     editUser,
     confirmDeleteUser,
     openIncidentUpdate,

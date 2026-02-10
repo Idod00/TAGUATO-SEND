@@ -122,3 +122,40 @@ INSERT INTO taguato.services (name, description, display_order) VALUES
     ('PostgreSQL', 'Base de datos', 3),
     ('Redis', 'Cache y colas', 4)
 ON CONFLICT (name) DO NOTHING;
+
+-- ============================================
+-- Message templates
+-- ============================================
+CREATE TABLE IF NOT EXISTS taguato.message_templates (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES taguato.users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_templates_user ON taguato.message_templates(user_id);
+
+-- ============================================
+-- Contact lists
+-- ============================================
+CREATE TABLE IF NOT EXISTS taguato.contact_lists (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES taguato.users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_lists_user ON taguato.contact_lists(user_id);
+
+CREATE TABLE IF NOT EXISTS taguato.contact_list_items (
+    id SERIAL PRIMARY KEY,
+    list_id INT NOT NULL REFERENCES taguato.contact_lists(id) ON DELETE CASCADE,
+    phone_number VARCHAR(20) NOT NULL,
+    label VARCHAR(100) DEFAULT '',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_items_list ON taguato.contact_list_items(list_id);
