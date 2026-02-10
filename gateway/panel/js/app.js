@@ -27,8 +27,9 @@ const App = (() => {
     const navLink = $(`.nav-link[data-section="${section}"]`);
     if (navLink) navLink.classList.add('active');
 
+    if (section === 'dashboard') loadDashboard();
     if (section === 'instances') loadInstances();
-    if (section === 'messages') loadInstanceSelect();
+    if (section === 'messages') loadMessageSection();
     if (section === 'docs') renderDocs();
     if (section === 'admin') loadUsers();
     if (section === 'status') loadStatusSection();
@@ -124,14 +125,17 @@ const App = (() => {
     // Show/hide admin nav
     const adminNav = $('#nav-admin');
     const statusNav = $('#nav-status');
+    const dashboardNav = $('#nav-dashboard');
     if (currentUser.role === 'admin') {
       show(adminNav);
       show(statusNav);
+      show(dashboardNav);
     } else {
       hide(adminNav);
       hide(statusNav);
+      hide(dashboardNav);
     }
-    navigate('instances');
+    navigate(currentUser.role === 'admin' ? 'dashboard' : 'instances');
   }
 
   // --- Instances ---
@@ -231,14 +235,24 @@ const App = (() => {
   }
 
   // --- Messages ---
+  function loadMessageSection() {
+    loadInstanceSelect();
+    // Reset bulk progress on section load
+    hide($('#bulk-progress-zone'));
+  }
+
   function loadInstanceSelect() {
-    const sel = $('#msg-instance');
-    sel.innerHTML = '<option value="">Seleccionar instancia...</option>';
-    instances.forEach(inst => {
-      const name = inst.instance?.instanceName || inst.name || inst.instanceName || '';
-      if (name) {
-        sel.innerHTML += `<option value="${esc(name)}">${esc(name)}</option>`;
-      }
+    const selectors = ['#msg-instance', '#bulk-instance'];
+    selectors.forEach(selId => {
+      const sel = $(selId);
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Seleccionar instancia...</option>';
+      instances.forEach(inst => {
+        const name = inst.instance?.instanceName || inst.name || inst.instanceName || '';
+        if (name) {
+          sel.innerHTML += `<option value="${esc(name)}">${esc(name)}</option>`;
+        }
+      });
     });
   }
 
@@ -261,6 +275,134 @@ const App = (() => {
       showToast(err.message || 'Error al enviar', 'error');
     } finally {
       btn.disabled = false;
+    }
+  }
+
+  // --- Bulk Messaging ---
+  async function handleBulkMessage(e) {
+    e.preventDefault();
+    const instanceName = $('#bulk-instance').value;
+    const numbersRaw = $('#bulk-numbers').value.trim();
+    const text = $('#bulk-text').value.trim();
+
+    if (!instanceName || !numbersRaw || !text) {
+      showToast('Completa todos los campos', 'error');
+      return;
+    }
+
+    const numbers = numbersRaw.split('\n').map(n => n.trim()).filter(n => n);
+    if (numbers.length === 0) {
+      showToast('Ingresa al menos un numero', 'error');
+      return;
+    }
+    if (numbers.length > 500) {
+      showToast('Maximo 500 numeros permitidos', 'error');
+      return;
+    }
+
+    const btn = $('#bulk-send-btn');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+
+    const progressZone = $('#bulk-progress-zone');
+    const progressFill = $('#bulk-progress-fill');
+    const progressText = $('#bulk-progress-text');
+    const resultsDiv = $('#bulk-results');
+    const failedDiv = $('#bulk-failed-details');
+    show(progressZone);
+    progressFill.style.width = '0%';
+    progressText.textContent = '0 / ' + numbers.length;
+    resultsDiv.innerHTML = '';
+    failedDiv.innerHTML = '';
+
+    try {
+      const results = await API.sendBulkText(instanceName, numbers, text, (sent, res) => {
+        const pct = Math.round((sent / numbers.length) * 100);
+        progressFill.style.width = pct + '%';
+        progressText.textContent = sent + ' / ' + numbers.length;
+
+        const sentCount = res.filter(r => r.status === 'sent').length;
+        const failedCount = res.filter(r => r.status === 'failed').length;
+        const skippedCount = res.filter(r => r.status === 'skipped').length;
+        resultsDiv.innerHTML =
+          `<span class="bulk-sent">Enviados: ${sentCount}</span>` +
+          `<span class="bulk-failed">Fallidos: ${failedCount}</span>` +
+          (skippedCount > 0 ? `<span class="bulk-skipped">Omitidos: ${skippedCount}</span>` : '');
+      });
+
+      const failed = results.filter(r => r.status === 'failed');
+      if (failed.length > 0) {
+        failedDiv.innerHTML = `
+          <details class="bulk-failed-details">
+            <summary>Ver ${failed.length} numero(s) fallido(s)</summary>
+            <ul class="failed-list">
+              ${failed.map(f => `<li><strong>${esc(f.number)}</strong>: ${esc(f.error)}</li>`).join('')}
+            </ul>
+          </details>`;
+      }
+
+      const sentCount = results.filter(r => r.status === 'sent').length;
+      showToast(`Envio masivo completado: ${sentCount}/${numbers.length} enviados`);
+    } catch (err) {
+      showToast(err.message || 'Error en envio masivo', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Enviar Masivo';
+    }
+  }
+
+  // --- Dashboard ---
+  async function loadDashboard() {
+    if (!currentUser || currentUser.role !== 'admin') return;
+    const cardsContainer = $('#dashboard-cards');
+    const activityContainer = $('#dashboard-activity');
+    cardsContainer.innerHTML = '<div class="loading">Cargando...</div>';
+    activityContainer.innerHTML = '';
+
+    try {
+      const data = await API.getDashboard();
+
+      cardsContainer.innerHTML = `
+        <div class="dashboard-card">
+          <div class="dash-value">${data.users.total}</div>
+          <div class="dash-label">Usuarios</div>
+          <div class="dash-sub">${data.users.active} activos</div>
+        </div>
+        <div class="dashboard-card">
+          <div class="dash-value">${data.instances.connected}</div>
+          <div class="dash-label">Instancias Conectadas</div>
+          <div class="dash-sub">de ${data.instances.total_evolution} en Evolution</div>
+        </div>
+        <div class="dashboard-card dash-green">
+          <div class="dash-value">${data.uptime_30d}%</div>
+          <div class="dash-label">Uptime Global</div>
+          <div class="dash-sub">ultimos 30 dias</div>
+        </div>
+        <div class="dashboard-card">
+          <div class="dash-value">${data.instances.total_registered}</div>
+          <div class="dash-label">Instancias Registradas</div>
+          <div class="dash-sub">en base de datos</div>
+        </div>`;
+
+      const activity = data.recent_activity || [];
+      if (activity.length === 0) {
+        activityContainer.innerHTML = '<div class="empty">No hay actividad reciente</div>';
+      } else {
+        activityContainer.innerHTML = activity.map(a => {
+          const isUser = a.type === 'user_created';
+          const iconClass = isUser ? 'activity-icon-user' : 'activity-icon-instance';
+          const iconText = isUser ? 'U' : 'I';
+          const label = isUser ? 'Usuario creado' : 'Instancia creada';
+          return `
+            <div class="recent-activity-item">
+              <div class="activity-icon ${iconClass}">${iconText}</div>
+              <div class="activity-name">${esc(a.name)} <span style="color:var(--text-light);font-size:0.75rem;">(${label})</span></div>
+              <div class="activity-time">${formatDate(a.created_at)}</div>
+            </div>`;
+        }).join('');
+      }
+    } catch (err) {
+      cardsContainer.innerHTML = '<div class="empty">Error al cargar dashboard</div>';
     }
   }
 
@@ -838,6 +980,7 @@ const App = (() => {
     $('#change-password-form').addEventListener('submit', handleChangePassword);
     $('#create-instance-form').addEventListener('submit', handleCreateInstance);
     $('#send-message-form').addEventListener('submit', handleSendMessage);
+    $('#bulk-message-form').addEventListener('submit', handleBulkMessage);
     $('#create-user-form').addEventListener('submit', handleCreateUser);
     $('#edit-user-form').addEventListener('submit', handleUpdateUser);
     $('#create-incident-form').addEventListener('submit', handleCreateIncident);

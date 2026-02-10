@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TAGUATO-SEND</title>
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/panel/css/style.css?v=1.3">
+  <link rel="stylesheet" href="/panel/css/style.css?v=1.4">
 </head>
 <body>
 
@@ -63,6 +63,7 @@
         <div class="user-info"><span id="user-display"></span></div>
       </div>
       <nav>
+        <a href="#" class="nav-link hidden" id="nav-dashboard" data-section="dashboard">Dashboard</a>
         <a href="#" class="nav-link active" data-section="instances">Instancias</a>
         <a href="#" class="nav-link" data-section="messages">Mensajes</a>
         <a href="#" class="nav-link" data-section="docs">API Docs</a>
@@ -76,6 +77,14 @@
 
     <!-- Main -->
     <main class="main-content">
+
+      <!-- Dashboard Section (admin only) -->
+      <div id="section-dashboard" class="section hidden">
+        <h2>Dashboard</h2>
+        <div id="dashboard-cards" class="dashboard-grid"></div>
+        <h3 style="font-size:1rem;margin-bottom:0.75rem;color:var(--text-light);font-weight:600;">Actividad Reciente</h3>
+        <div id="dashboard-activity" class="recent-activity-list"></div>
+      </div>
 
       <!-- Instances Section -->
       <div id="section-instances" class="section">
@@ -107,6 +116,35 @@
           </div>
           <button type="submit" id="msg-send-btn" class="btn btn-primary">Enviar</button>
         </form>
+
+        <div class="bulk-divider">o</div>
+
+        <h2>Envio Masivo</h2>
+        <form id="bulk-message-form" class="bulk-form">
+          <div class="form-group">
+            <label for="bulk-instance">Instancia</label>
+            <select id="bulk-instance" class="form-control" required>
+              <option value="">Seleccionar instancia...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="bulk-numbers">Numeros (uno por linea)</label>
+            <textarea id="bulk-numbers" class="form-control" rows="5" placeholder="595981123456&#10;595982654321&#10;595983111222" required></textarea>
+            <div class="bulk-hint">Maximo 500 numeros</div>
+          </div>
+          <div class="form-group">
+            <label for="bulk-text">Mensaje</label>
+            <textarea id="bulk-text" class="form-control" rows="4" required></textarea>
+          </div>
+          <button type="submit" id="bulk-send-btn" class="btn btn-primary">Enviar Masivo</button>
+        </form>
+
+        <div id="bulk-progress-zone" class="bulk-progress hidden">
+          <div class="bulk-progress-bar"><div id="bulk-progress-fill" class="bulk-progress-fill" style="width:0%"></div></div>
+          <div id="bulk-progress-text" class="bulk-progress-text">0 / 0</div>
+          <div id="bulk-results" class="bulk-results"></div>
+          <div id="bulk-failed-details"></div>
+        </div>
       </div>
 
       <!-- API Docs Section -->
@@ -319,8 +357,8 @@
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/panel/js/api.js?v=1.3"></script>
-  <script src="/panel/js/docs-data.js?v=1.3"></script>
-  <script src="/panel/js/app.js?v=1.3"></script>
+  <script src="/panel/js/api.js?v=1.4"></script>
+  <script src="/panel/js/docs-data.js?v=1.4"></script>
+  <script src="/panel/js/app.js?v=1.4"></script>
 </body>
 </html>

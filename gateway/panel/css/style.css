@@ -1008,6 +1008,176 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   border-top: 1px solid var(--border);
 }
 
+/* ===== Dashboard ===== */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.dashboard-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1rem;
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.dashboard-card .dash-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1.2;
+}
+
+.dashboard-card .dash-label {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  margin-top: 0.25rem;
+}
+
+.dashboard-card .dash-sub {
+  font-size: 0.75rem;
+  color: var(--text-light);
+  margin-top: 0.15rem;
+}
+
+.dashboard-card.dash-green .dash-value { color: var(--success); }
+
+.recent-activity-list {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.recent-activity-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.recent-activity-item:last-child { border-bottom: none; }
+
+.activity-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.activity-icon-user { background: #fde8e8; color: var(--primary); }
+.activity-icon-instance { background: #dcfce7; color: #166534; }
+
+.activity-name { font-weight: 500; flex: 1; }
+.activity-time { font-size: 0.75rem; color: var(--text-light); }
+
+/* ===== Bulk Messaging ===== */
+
+.bulk-divider {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 1.5rem 0;
+  color: var(--text-light);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.bulk-divider::before,
+.bulk-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.bulk-form { max-width: 500px; }
+
+.bulk-form .bulk-hint {
+  font-size: 0.75rem;
+  color: var(--text-light);
+  margin-top: 0.2rem;
+}
+
+.bulk-progress {
+  max-width: 500px;
+  margin-top: 1rem;
+}
+
+.bulk-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--border);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.bulk-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 99px;
+  transition: width 0.3s ease;
+}
+
+.bulk-progress-text {
+  font-size: 0.85rem;
+  color: var(--text-light);
+  margin-bottom: 0.5rem;
+}
+
+.bulk-results {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.bulk-results .bulk-sent { color: var(--success); font-weight: 600; }
+.bulk-results .bulk-failed { color: var(--danger); font-weight: 600; }
+.bulk-results .bulk-skipped { color: var(--text-light); font-weight: 600; }
+
+.bulk-failed-details {
+  font-size: 0.825rem;
+  margin-top: 0.5rem;
+}
+
+.bulk-failed-details summary {
+  cursor: pointer;
+  color: var(--danger);
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.bulk-failed-details .failed-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.25rem 0 0 0.5rem;
+  font-size: 0.8rem;
+}
+
+.bulk-failed-details .failed-list li {
+  padding: 0.15rem 0;
+  color: var(--text-light);
+}
+
+.bulk-failed-details .failed-list li strong {
+  color: var(--text);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   #app { flex-direction: column; }
@@ -1070,4 +1240,5 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .incident-create-form .form-row { grid-template-columns: 1fr; }
   .maintenance-create-form .form-row { grid-template-columns: 1fr; }
   .status-health-overview { grid-template-columns: 1fr 1fr; }
+  .dashboard-grid { grid-template-columns: 1fr 1fr; }
 }

@@ -244,6 +244,29 @@ if daily_res then
     end
 end
 
+-- Response time history (hourly averages, last 24h)
+local response_time_history = {}
+local rt_res = db.query([[
+    SELECT service_name, DATE_TRUNC('hour', checked_at) as hour,
+           ROUND(AVG(response_time)) as avg_ms
+    FROM taguato.uptime_checks
+    WHERE checked_at >= NOW() - INTERVAL '24 hours'
+    GROUP BY service_name, DATE_TRUNC('hour', checked_at)
+    ORDER BY service_name, hour
+]])
+if rt_res then
+    for _, row in ipairs(rt_res) do
+        if not response_time_history[row.service_name] then
+            response_time_history[row.service_name] = {}
+        end
+        local svc = response_time_history[row.service_name]
+        svc[#svc + 1] = {
+            hour = row.hour,
+            avg_ms = tonumber(row.avg_ms) or 0,
+        }
+    end
+end
+
 local response_data = {
     overall_status = overall,
     services = services,
@@ -252,6 +275,7 @@ local response_data = {
     scheduled_maintenances = maintenances,
     uptime = uptime,
     uptime_daily = uptime_daily,
+    response_time_history = response_time_history,
     cached = false,
     checked_at = ngx.http_time(ngx.time()),
 }

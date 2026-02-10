@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TAGUATO-SEND - Estado del Sistema</title>
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --primary: #8B1A1A;
@@ -440,12 +441,43 @@
 
     .loading-text { animation: pulse 1.5s infinite; }
 
+    /* Response time charts */
+    .rt-section {
+      margin-bottom: 2rem;
+    }
+
+    .rt-charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .rt-chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.85rem 1rem;
+      box-shadow: var(--shadow);
+    }
+
+    .rt-chart-card h4 {
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    .rt-chart-container {
+      height: 180px;
+      position: relative;
+    }
+
     /* Responsive */
     @media (max-width: 600px) {
       .header { padding: 1rem; }
       .container { padding: 1rem 0.75rem; }
       .services-grid { grid-template-columns: 1fr 1fr; }
       .uptime-bar { height: 18px; }
+      .rt-charts-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -472,6 +504,7 @@
   <script>
     const content = document.getElementById('content');
     const lastCheck = document.getElementById('last-check');
+    let rtCharts = [];
 
     function esc(str) {
       const d = document.createElement('div');
@@ -615,6 +648,26 @@
         html += '</div>';
       }
 
+      // Response time charts (24h)
+      const rtHistory = data.response_time_history || {};
+      const rtServiceNames = Object.keys(rtHistory).filter(n => n !== 'Gateway');
+      if (rtServiceNames.length > 0) {
+        html += '<div class="rt-section">';
+        html += '<h2 class="section-title">Tiempo de Respuesta (24h)</h2>';
+        html += '<div class="rt-charts-grid">';
+        rtServiceNames.forEach(name => {
+          const canvasId = 'rt-chart-' + name.replace(/[^a-zA-Z0-9]/g, '_');
+          html += `
+            <div class="rt-chart-card">
+              <h4>${esc(name)}</h4>
+              <div class="rt-chart-container">
+                <canvas id="${canvasId}"></canvas>
+              </div>
+            </div>`;
+        });
+        html += '</div></div>';
+      }
+
       // Active incidents
       const active = data.active_incidents || [];
       if (active.length > 0) {
@@ -640,6 +693,78 @@
           body.classList.toggle('open');
           chev.classList.toggle('open');
         });
+      });
+
+      // Render response time charts
+      rtCharts.forEach(c => c.destroy());
+      rtCharts = [];
+
+      const chartColors = {
+        'Evolution API': { border: '#2563eb', bg: 'rgba(37,99,235,0.1)' },
+        'PostgreSQL': { border: '#d97706', bg: 'rgba(217,119,6,0.1)' },
+        'Redis': { border: '#dc2626', bg: 'rgba(220,38,38,0.1)' },
+      };
+
+      rtServiceNames.forEach(name => {
+        const canvasId = 'rt-chart-' + name.replace(/[^a-zA-Z0-9]/g, '_');
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+
+        const points = rtHistory[name] || [];
+        const labels = points.map(p => {
+          const d = new Date(p.hour);
+          return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+        });
+        const values = points.map(p => p.avg_ms);
+
+        const colors = chartColors[name] || { border: '#8B1A1A', bg: 'rgba(139,26,26,0.1)' };
+
+        const chart = new Chart(canvas, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: name + ' (ms)',
+              data: values,
+              borderColor: colors.border,
+              backgroundColor: colors.bg,
+              fill: true,
+              tension: 0.3,
+              pointRadius: 2,
+              pointHoverRadius: 5,
+              borderWidth: 2,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(ctx) {
+                    return ctx.parsed.y + ' ms';
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                ticks: { font: { size: 10 }, maxRotation: 45 },
+                grid: { display: false },
+              },
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  font: { size: 10 },
+                  callback: function(v) { return v + 'ms'; }
+                },
+                grid: { color: 'rgba(0,0,0,0.05)' },
+              }
+            }
+          }
+        });
+        rtCharts.push(chart);
       });
     }
 

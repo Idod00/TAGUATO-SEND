@@ -94,6 +94,36 @@ const API = (() => {
     });
   }
 
+  // Dashboard
+  async function getDashboard() {
+    return await request('GET', '/admin/dashboard');
+  }
+
+  // Bulk messaging
+  async function sendBulkText(instanceName, numbers, text, onProgress) {
+    const results = [];
+    for (let i = 0; i < numbers.length; i++) {
+      const number = numbers[i].trim();
+      if (!number) {
+        results.push({ number, status: 'skipped' });
+        if (onProgress) onProgress(i + 1, results);
+        continue;
+      }
+      try {
+        await sendText(instanceName, number, text);
+        results.push({ number, status: 'sent' });
+      } catch (err) {
+        results.push({ number, status: 'failed', error: err.message || 'Error' });
+      }
+      if (onProgress) onProgress(i + 1, results);
+      // 500ms delay between sends
+      if (i < numbers.length - 1) {
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+    return results;
+  }
+
   // Admin
   async function listUsers() {
     return await request('GET', '/admin/users');
@@ -182,7 +212,8 @@ const API = (() => {
     getToken, getStoredUser, setSession, clearSession,
     login, logout, getProfile, changePassword,
     fetchInstances, createInstance, deleteInstance, connectInstance, getInstanceStatus,
-    sendText,
+    sendText, sendBulkText,
+    getDashboard,
     listUsers, createUser, updateUser, deleteUser,
     getPublicStatus, listIncidents, listIncidentServices,
     createIncident, addIncidentUpdate, updateIncident, deleteIncident,
