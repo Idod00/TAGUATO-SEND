@@ -6,6 +6,15 @@ local db = require "init"
 local json = require "json"
 local cjson = require "cjson"
 
+-- Ensure empty Lua tables serialize as JSON [] not {}
+local empty_array_mt = cjson.empty_array_mt
+local function as_array(t)
+    if t == nil or (type(t) == "table" and #t == 0) then
+        return setmetatable({}, empty_array_mt)
+    end
+    return t
+end
+
 if ngx.req.get_method() ~= "GET" then
     json.respond(405, { error = "Method not allowed" })
     return
@@ -104,7 +113,7 @@ local active_incidents_res = db.query([[
     WHERE i.status != 'resolved'
     ORDER BY i.created_at DESC
 ]])
-local active_incidents = active_incidents_res or {}
+local active_incidents = as_array(active_incidents_res)
 
 for _, inc in ipairs(active_incidents) do
     if inc.severity == "critical" and overall ~= "major_outage" then
@@ -130,6 +139,7 @@ for _, inc in ipairs(active_incidents) do
             inc.affected_services[#inc.affected_services + 1] = s.name
         end
     end
+    inc.affected_services = as_array(inc.affected_services)
 
     local upd_res = db.query([[
         SELECT iu.status, iu.message, iu.created_at
@@ -137,7 +147,7 @@ for _, inc in ipairs(active_incidents) do
         WHERE iu.incident_id = $1
         ORDER BY iu.created_at DESC
     ]], inc.id)
-    inc.updates = upd_res or {}
+    inc.updates = as_array(upd_res)
 end
 
 -- Recent resolved incidents (last 20)
@@ -148,7 +158,7 @@ local recent_res = db.query([[
     ORDER BY i.resolved_at DESC
     LIMIT 20
 ]])
-local recent_incidents = recent_res or {}
+local recent_incidents = as_array(recent_res)
 
 for _, inc in ipairs(recent_incidents) do
     local svc_res = db.query([[
@@ -163,6 +173,7 @@ for _, inc in ipairs(recent_incidents) do
             inc.affected_services[#inc.affected_services + 1] = s.name
         end
     end
+    inc.affected_services = as_array(inc.affected_services)
 
     local upd_res = db.query([[
         SELECT iu.status, iu.message, iu.created_at
@@ -170,7 +181,7 @@ for _, inc in ipairs(recent_incidents) do
         WHERE iu.incident_id = $1
         ORDER BY iu.created_at DESC
     ]], inc.id)
-    inc.updates = upd_res or {}
+    inc.updates = as_array(upd_res)
 end
 
 -- Scheduled maintenances (upcoming + in_progress)
@@ -180,7 +191,7 @@ local maint_res = db.query([[
     WHERE m.status IN ('scheduled', 'in_progress')
     ORDER BY m.scheduled_start ASC
 ]])
-local maintenances = maint_res or {}
+local maintenances = as_array(maint_res)
 
 for _, m in ipairs(maintenances) do
     local svc_res = db.query([[
@@ -195,6 +206,7 @@ for _, m in ipairs(maintenances) do
             m.affected_services[#m.affected_services + 1] = s.name
         end
     end
+    m.affected_services = as_array(m.affected_services)
 end
 
 -- Uptime percentages (last 30 days)

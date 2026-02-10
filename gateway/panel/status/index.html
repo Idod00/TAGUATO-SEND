@@ -595,6 +595,13 @@
       });
       html += '</div>';
 
+      // Active incidents (high visibility, right after services)
+      const active = data.active_incidents || [];
+      if (active.length > 0) {
+        html += '<h2 class="section-title">Incidentes Activos</h2>';
+        active.forEach(inc => { html += renderIncident(inc); });
+      }
+
       // Uptime bars (30 days)
       const uptimeDaily = data.uptime_daily || {};
       const uptimePct = data.uptime || {};
@@ -666,13 +673,6 @@
             </div>`;
         });
         html += '</div></div>';
-      }
-
-      // Active incidents
-      const active = data.active_incidents || [];
-      if (active.length > 0) {
-        html += '<h2 class="section-title">Incidentes Activos</h2>';
-        active.forEach(inc => { html += renderIncident(inc); });
       }
 
       // Recent resolved
