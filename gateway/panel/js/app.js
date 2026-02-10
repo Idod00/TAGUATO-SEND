@@ -5,6 +5,8 @@ const App = (() => {
   let dashboardTimer = null;
   let cachedTemplates = [];
   let cachedContactLists = [];
+  let currentMsgType = 'text';
+  let historyPage = 1;
 
   // --- Helpers ---
   function $(sel) { return document.querySelector(sel); }
@@ -69,6 +71,7 @@ const App = (() => {
     if (section === 'messages') loadMessageSection();
     if (section === 'templates') loadTemplates();
     if (section === 'contacts') loadContactLists();
+    if (section === 'history') { historyPage = 1; loadHistory(); }
     if (section === 'sessions') loadSessions();
     if (section === 'docs') renderDocs();
     if (section === 'admin') loadUsers();
@@ -297,23 +300,93 @@ const App = (() => {
     });
   }
 
+  function setMsgType(type) {
+    currentMsgType = type;
+    $$('.msg-type-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.type === type);
+      b.classList.toggle('btn-primary', b.dataset.type === type);
+      b.classList.toggle('btn-secondary', b.dataset.type !== type);
+    });
+    const mediaFields = $('#msg-media-fields');
+    const textLabel = $('#msg-text-label');
+    if (type === 'media') {
+      show(mediaFields);
+      textLabel.textContent = 'Caption (opcional)';
+      $('#msg-text').removeAttribute('required');
+    } else {
+      hide(mediaFields);
+      textLabel.textContent = 'Mensaje';
+      $('#msg-text').setAttribute('required', 'required');
+    }
+  }
+
+  function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
   async function handleSendMessage(e) {
     e.preventDefault();
     const instanceName = $('#msg-instance').value;
     const number = $('#msg-number').value.trim();
     const text = $('#msg-text').value.trim();
-    if (!instanceName || !number || !text) {
-      showToast('Completa todos los campos', 'error');
+
+    if (!instanceName || !number) {
+      showToast('Completa instancia y numero', 'error');
       return;
     }
+
     const btn = $('#msg-send-btn');
     btn.disabled = true;
+
     try {
-      await API.sendText(instanceName, number, text);
-      showToast('Mensaje enviado');
+      if (currentMsgType === 'media') {
+        const mediaType = $('#msg-media-type').value;
+        let media = $('#msg-media-url').value.trim();
+        const fileInput = $('#msg-media-file');
+        const fileName = $('#msg-media-filename').value.trim();
+
+        if (!media && fileInput.files.length > 0) {
+          const file = fileInput.files[0];
+          if (file.size > 10 * 1024 * 1024) {
+            showToast('Archivo demasiado grande (max 10MB)', 'error');
+            btn.disabled = false;
+            return;
+          }
+          media = await readFileAsBase64(file);
+        }
+
+        if (!media) {
+          showToast('Ingresa una URL o sube un archivo', 'error');
+          btn.disabled = false;
+          return;
+        }
+
+        await API.sendMedia(instanceName, number, mediaType, media, text, fileName || undefined);
+        showToast('Media enviado');
+        API.logMessage(instanceName, number, mediaType, 'sent').catch(() => {});
+      } else {
+        if (!text) {
+          showToast('Escribe un mensaje', 'error');
+          btn.disabled = false;
+          return;
+        }
+        await API.sendText(instanceName, number, text);
+        showToast('Mensaje enviado');
+        API.logMessage(instanceName, number, 'text', 'sent').catch(() => {});
+      }
       $('#msg-text').value = '';
+      $('#msg-media-url').value = '';
+      $('#msg-media-file').value = '';
+      $('#msg-media-filename').value = '';
     } catch (err) {
       showToast(err.message || 'Error al enviar', 'error');
+      const msgType = currentMsgType === 'media' ? $('#msg-media-type').value : 'text';
+      API.logMessage(instanceName, number, msgType, 'failed', err.message).catch(() => {});
     } finally {
       btn.disabled = false;
     }
@@ -385,6 +458,13 @@ const App = (() => {
               ${failed.map(f => `<li><strong>${esc(f.number)}</strong>: ${esc(f.error)}</li>`).join('')}
             </ul>
           </details>`;
+      }
+
+      // Log bulk results
+      for (const r of results) {
+        if (r.status !== 'skipped') {
+          API.logMessage(instanceName, r.number, 'text', r.status === 'sent' ? 'sent' : (r.status === 'cancelled' ? 'cancelled' : 'failed'), r.error || null).catch(() => {});
+        }
       }
 
       const sentCount = results.filter(r => r.status === 'sent').length;
@@ -660,6 +740,69 @@ const App = (() => {
     } catch (err) {
       showToast(err.message || 'Error al cargar contactos', 'error');
     }
+  }
+
+  // --- History ---
+  async function loadHistory() {
+    const list = $('#history-list');
+    const pagination = $('#history-pagination');
+    list.innerHTML = '<div class="loading">Cargando historial...</div>';
+    pagination.innerHTML = '';
+
+    const params = { page: historyPage, limit: 50 };
+    const status = $('#hist-status').value;
+    const type = $('#hist-type').value;
+    const from = $('#hist-from').value;
+    const to = $('#hist-to').value;
+    if (status) params.status = status;
+    if (type) params.message_type = type;
+    if (from) params.date_from = from + 'T00:00:00';
+    if (to) params.date_to = to + 'T23:59:59';
+
+    try {
+      const data = await API.getMessageLogs(params);
+      const logs = data.logs || [];
+      if (logs.length === 0) {
+        list.innerHTML = '<div class="empty">No hay registros</div>';
+        return;
+      }
+
+      list.innerHTML = `
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Instancia</th><th>Numero</th><th>Tipo</th><th>Estado</th><th>Error</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${logs.map(l => `
+              <tr>
+                <td>${formatDate(l.created_at)}</td>
+                <td>${esc(l.instance_name)}</td>
+                <td>${esc(l.phone_number)}</td>
+                <td>${esc(l.message_type)}</td>
+                <td><span class="badge badge-${l.status === 'sent' ? 'connected' : 'disconnected'}">${esc(l.status)}</span></td>
+                <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(l.error_message || '')}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+
+      // Pagination
+      if (data.pages > 1) {
+        let html = '';
+        for (let p = 1; p <= data.pages; p++) {
+          html += `<button class="btn btn-sm ${p === data.page ? 'btn-primary' : 'btn-secondary'}" onclick="App.goHistoryPage(${p})">${p}</button>`;
+        }
+        pagination.innerHTML = html;
+      }
+    } catch (err) {
+      list.innerHTML = '<div class="empty">Error al cargar historial</div>';
+    }
+  }
+
+  function goHistoryPage(page) {
+    historyPage = page;
+    loadHistory();
   }
 
   // --- Sessions ---
@@ -1368,6 +1511,7 @@ const App = (() => {
     $('#bulk-load-contacts-btn').addEventListener('click', openLoadContactsModal);
     handleTemplateSelect('#msg-template', '#msg-text');
     handleTemplateSelect('#bulk-template', '#bulk-text');
+    $('#hist-filter-btn').addEventListener('click', () => { historyPage = 1; loadHistory(); });
     $('#btn-theme-toggle').addEventListener('click', toggleTheme);
     $('#create-user-form').addEventListener('submit', handleCreateUser);
     $('#edit-user-form').addEventListener('submit', handleUpdateUser);
@@ -1424,6 +1568,8 @@ const App = (() => {
     removeContactItem,
     openLoadContactsModal,
     loadContactsIntoNumbers,
+    setMsgType,
+    goHistoryPage,
     revokeSessionAction,
     editUser,
     confirmDeleteUser,

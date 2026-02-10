@@ -182,3 +182,20 @@ CREATE TABLE IF NOT EXISTS taguato.sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON taguato.sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON taguato.sessions(token_hash);
+
+-- ============================================
+-- Message logs
+-- ============================================
+CREATE TABLE IF NOT EXISTS taguato.message_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES taguato.users(id) ON DELETE CASCADE,
+    instance_name VARCHAR(255) NOT NULL,
+    phone_number VARCHAR(20) NOT NULL,
+    message_type VARCHAR(20) DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'document', 'audio', 'video')),
+    status VARCHAR(20) DEFAULT 'sent' CHECK (status IN ('sent', 'failed', 'cancelled')),
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_logs_user ON taguato.message_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_message_logs_created ON taguato.message_logs(created_at DESC);

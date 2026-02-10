@@ -68,6 +68,7 @@
         <a href="#" class="nav-link" data-section="messages">Mensajes</a>
         <a href="#" class="nav-link" data-section="templates">Plantillas</a>
         <a href="#" class="nav-link" data-section="contacts">Contactos</a>
+        <a href="#" class="nav-link" data-section="history">Historial</a>
         <a href="#" class="nav-link" data-section="sessions">Sesiones</a>
         <a href="#" class="nav-link" data-section="docs">API Docs</a>
         <a href="#" class="nav-link hidden" id="nav-status" data-section="status">Status</a>
@@ -115,13 +116,43 @@
             <input type="text" id="msg-number" class="form-control" placeholder="595981123456" required>
           </div>
           <div class="form-group">
+            <label>Tipo de mensaje</label>
+            <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+              <button type="button" class="btn btn-sm btn-primary msg-type-btn active" data-type="text" onclick="App.setMsgType('text')">Texto</button>
+              <button type="button" class="btn btn-sm btn-secondary msg-type-btn" data-type="media" onclick="App.setMsgType('media')">Media</button>
+            </div>
+          </div>
+          <div id="msg-media-fields" class="hidden">
+            <div class="form-group">
+              <label for="msg-media-type">Tipo de media</label>
+              <select id="msg-media-type" class="form-control">
+                <option value="image">Imagen</option>
+                <option value="document">Documento</option>
+                <option value="audio">Audio</option>
+                <option value="video">Video</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="msg-media-url">URL del archivo (o subir abajo)</label>
+              <input type="text" id="msg-media-url" class="form-control" placeholder="https://example.com/image.jpg">
+            </div>
+            <div class="form-group">
+              <label for="msg-media-file">O subir archivo (max 10MB)</label>
+              <input type="file" id="msg-media-file" class="form-control" accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx">
+            </div>
+            <div class="form-group">
+              <label for="msg-media-filename">Nombre del archivo (para documentos)</label>
+              <input type="text" id="msg-media-filename" class="form-control" placeholder="archivo.pdf">
+            </div>
+          </div>
+          <div class="form-group">
             <label for="msg-template">Plantilla (opcional)</label>
             <select id="msg-template" class="form-control">
               <option value="">Sin plantilla</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="msg-text">Mensaje</label>
+            <label for="msg-text" id="msg-text-label">Mensaje</label>
             <textarea id="msg-text" class="form-control" rows="4" required></textarea>
           </div>
           <button type="submit" id="msg-send-btn" class="btn btn-primary">Enviar</button>
@@ -196,6 +227,45 @@
           <button type="submit" class="btn btn-primary">Crear Lista</button>
         </form>
         <div id="contact-lists-container"></div>
+      </div>
+
+      <!-- History Section -->
+      <div id="section-history" class="section hidden">
+        <h2>Historial de Envios</h2>
+        <div class="admin-create-form" style="grid-template-columns:repeat(4,1fr);margin-bottom:1rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="hist-status">Estado</label>
+            <select id="hist-status" class="form-control">
+              <option value="">Todos</option>
+              <option value="sent">Enviados</option>
+              <option value="failed">Fallidos</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="hist-type">Tipo</label>
+            <select id="hist-type" class="form-control">
+              <option value="">Todos</option>
+              <option value="text">Texto</option>
+              <option value="image">Imagen</option>
+              <option value="document">Documento</option>
+              <option value="audio">Audio</option>
+              <option value="video">Video</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="hist-from">Desde</label>
+            <input type="date" id="hist-from" class="form-control">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="hist-to">Hasta</label>
+            <input type="date" id="hist-to" class="form-control">
+          </div>
+          <div class="form-group full-width" style="margin-bottom:0;">
+            <button type="button" id="hist-filter-btn" class="btn btn-primary btn-sm">Filtrar</button>
+          </div>
+        </div>
+        <div id="history-list"></div>
+        <div id="history-pagination" style="margin-top:0.75rem;display:flex;gap:0.5rem;justify-content:center;"></div>
       </div>
 
       <!-- Sessions Section -->

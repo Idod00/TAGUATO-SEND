@@ -157,6 +157,30 @@ const API = (() => {
     return await request('DELETE', '/admin/sessions/' + id);
   }
 
+  // Media
+  async function sendMedia(instanceName, number, mediatype, media, caption, fileName) {
+    const body = { number, mediatype, media };
+    if (caption) body.caption = caption;
+    if (fileName) body.fileName = fileName;
+    return await request('POST', '/message/sendMedia/' + instanceName, body);
+  }
+
+  // Message Logs
+  async function logMessage(instanceName, phoneNumber, messageType, status, errorMessage) {
+    return await request('POST', '/api/messages/log', {
+      instance_name: instanceName,
+      phone_number: phoneNumber,
+      message_type: messageType,
+      status,
+      error_message: errorMessage,
+    });
+  }
+
+  async function getMessageLogs(params) {
+    const qs = new URLSearchParams(params).toString();
+    return await request('GET', '/api/messages/log' + (qs ? '?' + qs : ''));
+  }
+
   // Dashboard
   async function getDashboard() {
     return await request('GET', '/admin/dashboard');
@@ -287,7 +311,8 @@ const API = (() => {
     getToken, getStoredUser, setSession, clearSession,
     login, logout, getProfile, changePassword,
     fetchInstances, createInstance, deleteInstance, connectInstance, getInstanceStatus,
-    sendText, sendBulkText, cancelBulk,
+    sendText, sendMedia, sendBulkText, cancelBulk,
+    logMessage, getMessageLogs,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listContactLists, getContactList, createContactList, updateContactList, deleteContactList,
     addContactItems, deleteContactItem,
