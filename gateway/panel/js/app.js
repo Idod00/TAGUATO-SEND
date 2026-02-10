@@ -2,6 +2,7 @@
 const App = (() => {
   let currentUser = null;
   let instances = [];
+  let dashboardTimer = null;
 
   // --- Helpers ---
   function $(sel) { return document.querySelector(sel); }
@@ -27,7 +28,13 @@ const App = (() => {
     const navLink = $(`.nav-link[data-section="${section}"]`);
     if (navLink) navLink.classList.add('active');
 
-    if (section === 'dashboard') loadDashboard();
+    // Clear dashboard auto-refresh when leaving
+    if (dashboardTimer) { clearInterval(dashboardTimer); dashboardTimer = null; }
+
+    if (section === 'dashboard') {
+      loadDashboard();
+      dashboardTimer = setInterval(loadDashboard, 30000);
+    }
     if (section === 'instances') loadInstances();
     if (section === 'messages') loadMessageSection();
     if (section === 'docs') renderDocs();
@@ -309,6 +316,9 @@ const App = (() => {
     const progressText = $('#bulk-progress-text');
     const resultsDiv = $('#bulk-results');
     const failedDiv = $('#bulk-failed-details');
+    const cancelBtn = $('#bulk-cancel-btn');
+    cancelBtn.disabled = false;
+    cancelBtn.textContent = 'Cancelar';
     show(progressZone);
     progressFill.style.width = '0%';
     progressText.textContent = '0 / ' + numbers.length;
@@ -323,10 +333,12 @@ const App = (() => {
 
         const sentCount = res.filter(r => r.status === 'sent').length;
         const failedCount = res.filter(r => r.status === 'failed').length;
+        const cancelledCount = res.filter(r => r.status === 'cancelled').length;
         const skippedCount = res.filter(r => r.status === 'skipped').length;
         resultsDiv.innerHTML =
           `<span class="bulk-sent">Enviados: ${sentCount}</span>` +
           `<span class="bulk-failed">Fallidos: ${failedCount}</span>` +
+          (cancelledCount > 0 ? `<span class="bulk-skipped">Cancelados: ${cancelledCount}</span>` : '') +
           (skippedCount > 0 ? `<span class="bulk-skipped">Omitidos: ${skippedCount}</span>` : '');
       });
 
@@ -342,12 +354,14 @@ const App = (() => {
       }
 
       const sentCount = results.filter(r => r.status === 'sent').length;
-      showToast(`Envio masivo completado: ${sentCount}/${numbers.length} enviados`);
+      const wasCancelled = results.some(r => r.status === 'cancelled');
+      showToast(`Envio masivo ${wasCancelled ? 'cancelado' : 'completado'}: ${sentCount}/${numbers.length} enviados`);
     } catch (err) {
       showToast(err.message || 'Error en envio masivo', 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = 'Enviar Masivo';
+      cancelBtn.disabled = true;
     }
   }
 
@@ -981,6 +995,11 @@ const App = (() => {
     $('#create-instance-form').addEventListener('submit', handleCreateInstance);
     $('#send-message-form').addEventListener('submit', handleSendMessage);
     $('#bulk-message-form').addEventListener('submit', handleBulkMessage);
+    $('#bulk-cancel-btn').addEventListener('click', () => {
+      API.cancelBulk();
+      $('#bulk-cancel-btn').disabled = true;
+      $('#bulk-cancel-btn').textContent = 'Cancelando...';
+    });
     $('#create-user-form').addEventListener('submit', handleCreateUser);
     $('#edit-user-form').addEventListener('submit', handleUpdateUser);
     $('#create-incident-form').addEventListener('submit', handleCreateIncident);

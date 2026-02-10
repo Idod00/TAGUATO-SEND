@@ -100,9 +100,24 @@ const API = (() => {
   }
 
   // Bulk messaging
+  let bulkCancelled = false;
+
+  function cancelBulk() {
+    bulkCancelled = true;
+  }
+
   async function sendBulkText(instanceName, numbers, text, onProgress) {
+    bulkCancelled = false;
     const results = [];
     for (let i = 0; i < numbers.length; i++) {
+      if (bulkCancelled) {
+        // Mark remaining as skipped
+        for (let j = i; j < numbers.length; j++) {
+          results.push({ number: numbers[j].trim(), status: 'cancelled' });
+        }
+        if (onProgress) onProgress(numbers.length, results);
+        break;
+      }
       const number = numbers[i].trim();
       if (!number) {
         results.push({ number, status: 'skipped' });
@@ -212,7 +227,7 @@ const API = (() => {
     getToken, getStoredUser, setSession, clearSession,
     login, logout, getProfile, changePassword,
     fetchInstances, createInstance, deleteInstance, connectInstance, getInstanceStatus,
-    sendText, sendBulkText,
+    sendText, sendBulkText, cancelBulk,
     getDashboard,
     listUsers, createUser, updateUser, deleteUser,
     getPublicStatus, listIncidents, listIncidentServices,

@@ -3,6 +3,15 @@
 
 local db = require "init"
 local json = require "json"
+local cjson = require "cjson"
+
+local empty_array_mt = cjson.empty_array_mt
+local function as_array(t)
+    if t == nil or (type(t) == "table" and #t == 0) then
+        return setmetatable({}, empty_array_mt)
+    end
+    return t
+end
 
 -- Verify admin role
 local user = ngx.ctx.user
@@ -23,7 +32,7 @@ if method == "GET" and uri == "/admin/incidents/services" then
         json.respond(500, { error = "Failed to list services" })
         return
     end
-    json.respond(200, { services = res })
+    json.respond(200, { services = as_array(res) })
     return
 end
 
@@ -51,7 +60,7 @@ if method == "GET" and uri == "/admin/incidents" then
             WHERE isv.incident_id = $1
             ORDER BY s.display_order
         ]], inc.id)
-        inc.affected_services = svc_res or {}
+        inc.affected_services = as_array(svc_res)
 
         local upd_res = db.query([[
             SELECT iu.id, iu.status, iu.message, iu.created_at,
@@ -61,10 +70,10 @@ if method == "GET" and uri == "/admin/incidents" then
             WHERE iu.incident_id = $1
             ORDER BY iu.created_at DESC
         ]], inc.id)
-        inc.updates = upd_res or {}
+        inc.updates = as_array(upd_res)
     end
 
-    json.respond(200, { incidents = res })
+    json.respond(200, { incidents = as_array(res) })
     return
 end
 

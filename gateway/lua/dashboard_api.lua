@@ -5,6 +5,14 @@ local db = require "init"
 local json = require "json"
 local cjson = require "cjson"
 
+local empty_array_mt = cjson.empty_array_mt
+local function as_array(t)
+    if t == nil or (type(t) == "table" and #t == 0) then
+        return setmetatable({}, empty_array_mt)
+    end
+    return t
+end
+
 -- Verify admin role
 local user = ngx.ctx.user
 if not user or user.role ~= "admin" then
@@ -114,5 +122,5 @@ json.respond(200, {
         connected = connected,
     },
     uptime_30d = uptime_30d,
-    recent_activity = recent_activity,
+    recent_activity = as_array(recent_activity),
 })

@@ -49,9 +49,9 @@ function _M.check()
     -- 1. Gateway - always operational (we're the gateway)
     results[1] = { name = "Gateway", status = "operational", response_time = 0 }
 
-    -- 2. Evolution API - raw HTTP GET to taguato-api:8080/health
+    -- 2. Evolution API - raw HTTP GET to taguato-api:8080/ (v2.3.7 root endpoint)
     t0 = ngx.now()
-    local api_status, api_err = http_get_health("taguato-api", 8080, "/health", 5000)
+    local api_status, api_err = http_get_health("taguato-api", 8080, "/", 5000)
     local api_time = math.floor((ngx.now() - t0) * 1000)
     if api_status and api_status == 200 then
         results[2] = { name = "Evolution API", status = "operational", response_time = api_time }

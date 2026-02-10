@@ -140,7 +140,10 @@
         </form>
 
         <div id="bulk-progress-zone" class="bulk-progress hidden">
-          <div class="bulk-progress-bar"><div id="bulk-progress-fill" class="bulk-progress-fill" style="width:0%"></div></div>
+          <div class="bulk-progress-header">
+            <div class="bulk-progress-bar"><div id="bulk-progress-fill" class="bulk-progress-fill" style="width:0%"></div></div>
+            <button type="button" id="bulk-cancel-btn" class="btn btn-danger btn-sm">Cancelar</button>
+          </div>
           <div id="bulk-progress-text" class="bulk-progress-text">0 / 0</div>
           <div id="bulk-results" class="bulk-results"></div>
           <div id="bulk-failed-details"></div>
