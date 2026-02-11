@@ -126,6 +126,28 @@ Todo se despliega con un solo comando via Docker Compose. Incluye un panel web c
 
 ## Inicio Rapido
 
+### Instalacion con un comando
+
+**Linux / macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Idod00/TAGUATO-SEND/main/install.sh -o install.sh && bash install.sh
+```
+
+**Windows (PowerShell como Administrador):**
+```powershell
+irm https://raw.githubusercontent.com/Idod00/TAGUATO-SEND/main/install.ps1 -OutFile install.ps1; .\install.ps1
+```
+
+**Ya tienes el repo clonado?**
+```bash
+./install.sh           # Linux/macOS
+.\install.ps1          # Windows
+```
+
+> El script verifica dependencias, genera claves seguras, configura `.env` y despliega todo automaticamente.
+
+---
+
 ### Requisitos
 
 - Docker y Docker Compose
