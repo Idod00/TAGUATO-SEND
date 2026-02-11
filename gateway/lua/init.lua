@@ -29,9 +29,13 @@ function _M.query(sql, ...)
 
     -- Escape parameters and build query by replacing $1, $2, etc.
     local args = {...}
-    if #args > 0 then
+    -- Find highest $N in query to know how many params to expect
+    -- (Lua's # operator and ipairs stop at nil, so we use select('#', ...) instead)
+    local nargs = select('#', ...)
+    if nargs > 0 then
         local escaped = {}
-        for i, v in ipairs(args) do
+        for i = 1, nargs do
+            local v = args[i]
             if v == nil then
                 escaped[i] = "NULL"
             elseif type(v) == "number" then
@@ -54,7 +58,7 @@ function _M.query(sql, ...)
             end
             parts[#parts + 1] = sql:sub(pos, s - 1)
             local idx = tonumber(num)
-            parts[#parts + 1] = escaped[idx] or ("$" .. num)
+            parts[#parts + 1] = escaped[idx] or "NULL"
             pos = e + 1
         end
         sql = table.concat(parts)

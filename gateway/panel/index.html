@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TAGUATO-SEND</title>
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/panel/css/style.css?v=1.4">
+  <link rel="stylesheet" href="/panel/css/style.css?v=1.7">
 </head>
 <body>
 
@@ -154,7 +154,15 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="msg-text" id="msg-text-label">Mensaje</label>
+            <label for="msg-text" id="msg-text-label"><span id="msg-text-label-text">Mensaje</span></label>
+            <div class="textarea-toolbar">
+              <button type="button" class="btn-format btn-format-bold" data-target="msg-text" data-wrap="*" title="Negrita *texto*">B</button>
+              <button type="button" class="btn-format btn-format-italic" data-target="msg-text" data-wrap="_" title="Cursiva _texto_">I</button>
+              <button type="button" class="btn-format btn-format-strike" data-target="msg-text" data-wrap="~" title="Tachado ~texto~">S</button>
+              <button type="button" class="btn-format btn-format-mono" data-target="msg-text" data-wrap="```" title="Monoespaciado ```texto```">&lt;/&gt;</button>
+              <span class="toolbar-sep"></span>
+              <button type="button" class="btn-emoji-trigger" data-target="msg-text" title="Insertar emoji">&#x1F600;</button>
+            </div>
             <textarea id="msg-text" class="form-control" rows="4" required></textarea>
           </div>
           <button type="submit" id="msg-send-btn" class="btn btn-primary">Enviar</button>
@@ -186,6 +194,14 @@
           </div>
           <div class="form-group">
             <label for="bulk-text">Mensaje</label>
+            <div class="textarea-toolbar">
+              <button type="button" class="btn-format btn-format-bold" data-target="bulk-text" data-wrap="*" title="Negrita *texto*">B</button>
+              <button type="button" class="btn-format btn-format-italic" data-target="bulk-text" data-wrap="_" title="Cursiva _texto_">I</button>
+              <button type="button" class="btn-format btn-format-strike" data-target="bulk-text" data-wrap="~" title="Tachado ~texto~">S</button>
+              <button type="button" class="btn-format btn-format-mono" data-target="bulk-text" data-wrap="```" title="Monoespaciado ```texto```">&lt;/&gt;</button>
+              <span class="toolbar-sep"></span>
+              <button type="button" class="btn-emoji-trigger" data-target="bulk-text" title="Insertar emoji">&#x1F600;</button>
+            </div>
             <textarea id="bulk-text" class="form-control" rows="4" required></textarea>
           </div>
           <button type="submit" id="bulk-send-btn" class="btn btn-primary">Enviar Masivo</button>
@@ -205,13 +221,21 @@
       <!-- Templates Section -->
       <div id="section-templates" class="section hidden">
         <h2>Plantillas de Mensajes</h2>
-        <form id="create-template-form" class="admin-create-form" style="grid-template-columns:1fr 2fr;">
+        <form id="create-template-form" class="admin-create-form" style="grid-template-columns:1fr 2fr;" onsubmit="return false;">
           <div class="form-group">
             <label for="new-tpl-name">Nombre</label>
             <input type="text" id="new-tpl-name" class="form-control" placeholder="Ej: Saludo" required>
           </div>
           <div class="form-group">
             <label for="new-tpl-content">Contenido</label>
+            <div class="textarea-toolbar">
+              <button type="button" class="btn-format btn-format-bold" data-target="new-tpl-content" data-wrap="*" title="Negrita *texto*">B</button>
+              <button type="button" class="btn-format btn-format-italic" data-target="new-tpl-content" data-wrap="_" title="Cursiva _texto_">I</button>
+              <button type="button" class="btn-format btn-format-strike" data-target="new-tpl-content" data-wrap="~" title="Tachado ~texto~">S</button>
+              <button type="button" class="btn-format btn-format-mono" data-target="new-tpl-content" data-wrap="```" title="Monoespaciado ```texto```">&lt;/&gt;</button>
+              <span class="toolbar-sep"></span>
+              <button type="button" class="btn-emoji-trigger" data-target="new-tpl-content" title="Insertar emoji">&#x1F600;</button>
+            </div>
             <textarea id="new-tpl-content" class="form-control" rows="2" placeholder="Hola, te escribo para..." required></textarea>
           </div>
           <div class="form-group full-width">
@@ -532,6 +556,43 @@
     </div>
   </div>
 
+  <!-- Audit Detail Modal -->
+  <div id="audit-detail-modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" title="Cerrar">&times;</button>
+      <h3>Detalle de Auditoria</h3>
+      <div id="audit-detail-content"></div>
+    </div>
+  </div>
+
+  <!-- Edit Template Modal -->
+  <div id="edit-template-modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" title="Cerrar">&times;</button>
+      <h3>Editar Plantilla</h3>
+      <form id="edit-template-form">
+        <input type="hidden" id="edit-tpl-id">
+        <div class="form-group">
+          <label for="edit-tpl-name">Nombre</label>
+          <input type="text" id="edit-tpl-name" class="form-control" required>
+        </div>
+        <div class="form-group">
+          <label for="edit-tpl-content">Contenido</label>
+          <div class="textarea-toolbar">
+            <button type="button" class="btn-format btn-format-bold" data-target="edit-tpl-content" data-wrap="*" title="Negrita *texto*">B</button>
+            <button type="button" class="btn-format btn-format-italic" data-target="edit-tpl-content" data-wrap="_" title="Cursiva _texto_">I</button>
+            <button type="button" class="btn-format btn-format-strike" data-target="edit-tpl-content" data-wrap="~" title="Tachado ~texto~">S</button>
+            <button type="button" class="btn-format btn-format-mono" data-target="edit-tpl-content" data-wrap="```" title="Monoespaciado ```texto```">&lt;/&gt;</button>
+            <span class="toolbar-sep"></span>
+            <button type="button" class="btn-emoji-trigger" data-target="edit-tpl-content" title="Insertar emoji">&#x1F600;</button>
+          </div>
+          <textarea id="edit-tpl-content" class="form-control" rows="5" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </form>
+    </div>
+  </div>
+
   <!-- Load Contacts Modal -->
   <div id="load-contacts-modal" class="modal hidden">
     <div class="modal-box">
@@ -544,8 +605,14 @@
   <!-- Toast -->
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/panel/js/api.js?v=1.4"></script>
-  <script src="/panel/js/docs-data.js?v=1.4"></script>
-  <script src="/panel/js/app.js?v=1.4"></script>
+  <!-- Emoji Picker (shared) -->
+  <div id="emoji-picker" class="emoji-picker hidden">
+    <div id="emoji-picker-tabs" class="emoji-picker-tabs"></div>
+    <div id="emoji-picker-grid" class="emoji-picker-grid"></div>
+  </div>
+
+  <script src="/panel/js/api.js?v=1.7"></script>
+  <script src="/panel/js/docs-data.js?v=1.7"></script>
+  <script src="/panel/js/app.js?v=1.7"></script>
 </body>
 </html>

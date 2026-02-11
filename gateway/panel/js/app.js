@@ -8,6 +8,17 @@ const App = (() => {
   let currentMsgType = 'text';
   let historyPage = 1;
   let auditPage = 1;
+  let cachedAuditLogs = [];
+  let emojiPickerTarget = null;
+  let emojiPickerCategory = 0;
+
+  const EMOJI_DATA = [
+    { icon: '\u{1F600}', name: 'Caras', emojis: ['\u{1F600}','\u{1F603}','\u{1F604}','\u{1F601}','\u{1F606}','\u{1F605}','\u{1F602}','\u{1F923}','\u{1F60A}','\u{1F607}','\u{1F642}','\u{1F643}','\u{1F609}','\u{1F60C}','\u{1F60D}','\u{1F970}','\u{1F618}','\u{1F617}','\u{1F619}','\u{1F61A}','\u{1F60B}','\u{1F61B}','\u{1F61C}','\u{1F92A}','\u{1F61D}','\u{1F911}','\u{1F917}','\u{1F92D}','\u{1F92B}','\u{1F914}','\u{1F910}','\u{1F928}','\u{1F610}','\u{1F611}','\u{1F636}','\u{1F60F}','\u{1F612}','\u{1F644}','\u{1F62C}','\u{1F925}','\u{1F614}','\u{1F61E}','\u{1F61F}','\u{1F615}','\u{1F641}','\u{2639}','\u{1F623}','\u{1F616}','\u{1F62B}','\u{1F629}','\u{1F622}','\u{1F62D}','\u{1F624}','\u{1F620}','\u{1F621}','\u{1F973}','\u{1F974}','\u{1F976}','\u{1F975}'] },
+    { icon: '\u{1F44D}', name: 'Gestos', emojis: ['\u{1F44D}','\u{1F44E}','\u{1F44A}','\u{270A}','\u{1F91B}','\u{1F91C}','\u{1F44F}','\u{1F64C}','\u{1F450}','\u{1F932}','\u{1F91D}','\u{1F64F}','\u{270D}','\u{1F485}','\u{1F933}','\u{1F4AA}','\u{1F44B}','\u{1F91A}','\u{1F590}','\u{270B}','\u{1F596}','\u{1F44C}','\u{270C}','\u{1F91E}','\u{1F91F}','\u{1F918}','\u{1F448}','\u{1F449}','\u{1F446}','\u{1F447}','\u{261D}','\u{1F595}'] },
+    { icon: '\u{2764}', name: 'Simbolos', emojis: ['\u{2764}','\u{1F9E1}','\u{1F49B}','\u{1F49A}','\u{1F499}','\u{1F49C}','\u{1F5A4}','\u{1F494}','\u{2763}','\u{1F495}','\u{1F49E}','\u{1F493}','\u{1F497}','\u{1F496}','\u{1F498}','\u{1F49D}','\u{2B50}','\u{1F31F}','\u{1F4AB}','\u{2728}','\u{1F525}','\u{1F4A5}','\u{1F389}','\u{1F388}','\u{1F381}','\u{1F3C6}','\u{1F947}','\u{1F4AF}','\u{2705}','\u{274C}','\u{2757}','\u{2753}'] },
+    { icon: '\u{1F436}', name: 'Animales', emojis: ['\u{1F436}','\u{1F431}','\u{1F42D}','\u{1F439}','\u{1F430}','\u{1F98A}','\u{1F43B}','\u{1F43C}','\u{1F428}','\u{1F42F}','\u{1F981}','\u{1F42E}','\u{1F437}','\u{1F438}','\u{1F435}','\u{1F414}','\u{1F427}','\u{1F426}','\u{1F985}','\u{1F98B}','\u{1F41B}','\u{1F41D}','\u{1F422}','\u{1F40D}'] },
+    { icon: '\u{1F34E}', name: 'Comida', emojis: ['\u{1F34E}','\u{1F34F}','\u{1F350}','\u{1F34A}','\u{1F34B}','\u{1F34C}','\u{1F349}','\u{1F347}','\u{1F353}','\u{1F348}','\u{1F352}','\u{1F351}','\u{1F34D}','\u{1F965}','\u{1F951}','\u{1F35E}','\u{1F950}','\u{1F32E}','\u{1F355}','\u{1F354}','\u{1F37F}','\u{1F366}','\u{1F370}','\u{1F382}','\u{2615}','\u{1F37A}','\u{1F377}'] }
+  ];
 
   // --- Helpers ---
   function $(sel) { return document.querySelector(sel); }
@@ -49,7 +60,7 @@ const App = (() => {
     const btn = $('#btn-theme-toggle');
     if (!btn) return;
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    btn.textContent = isDark ? 'Tema Claro' : 'Tema Oscuro';
+    btn.innerHTML = isDark ? '\u2600\uFE0F Tema Claro' : '\uD83C\uDF19 Tema Oscuro';
   }
 
   // --- Navigation ---
@@ -317,14 +328,14 @@ const App = (() => {
       b.classList.toggle('btn-secondary', b.dataset.type !== type);
     });
     const mediaFields = $('#msg-media-fields');
-    const textLabel = $('#msg-text-label');
+    const textLabelSpan = $('#msg-text-label-text');
     if (type === 'media') {
       show(mediaFields);
-      textLabel.textContent = 'Caption (opcional)';
+      textLabelSpan.textContent = 'Caption (opcional)';
       $('#msg-text').removeAttribute('required');
     } else {
       hide(mediaFields);
-      textLabel.textContent = 'Mensaje';
+      textLabelSpan.textContent = 'Mensaje';
       $('#msg-text').setAttribute('required', 'required');
     }
   }
@@ -512,7 +523,7 @@ const App = (() => {
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <h3 style="font-size:0.95rem;">${esc(t.name)}</h3>
           <div class="instance-actions">
-            <button class="btn btn-sm btn-secondary" onclick="App.editTemplate(${t.id}, '${esc(t.name).replace(/'/g, "\\'")}')">Editar</button>
+            <button class="btn btn-sm btn-secondary" onclick="App.editTemplate(${t.id})">Editar</button>
             <button class="btn btn-sm btn-danger" onclick="App.confirmDeleteTemplate(${t.id}, '${esc(t.name).replace(/'/g, "\\'")}')">Eliminar</button>
           </div>
         </div>
@@ -537,16 +548,32 @@ const App = (() => {
     }
   }
 
-  function editTemplate(id, name) {
+  function editTemplate(id) {
     const tpl = cachedTemplates.find(t => t.id === id);
     if (!tpl) return;
-    const newName = prompt('Nombre:', tpl.name);
-    if (newName === null) return;
-    const newContent = prompt('Contenido:', tpl.content);
-    if (newContent === null) return;
-    API.updateTemplate(id, { name: newName, content: newContent })
-      .then(() => { showToast('Plantilla actualizada'); loadTemplates(); })
-      .catch(err => showToast(err.message || 'Error', 'error'));
+    $('#edit-tpl-id').value = id;
+    $('#edit-tpl-name').value = tpl.name;
+    $('#edit-tpl-content').value = tpl.content;
+    show($('#edit-template-modal'));
+  }
+
+  async function handleUpdateTemplate(e) {
+    e.preventDefault();
+    const id = $('#edit-tpl-id').value;
+    const name = $('#edit-tpl-name').value.trim();
+    const content = $('#edit-tpl-content').value.trim();
+    if (!name || !content) {
+      showToast('Nombre y contenido son requeridos', 'error');
+      return;
+    }
+    try {
+      await API.updateTemplate(id, { name, content });
+      showToast('Plantilla actualizada');
+      closeModal('edit-template-modal');
+      loadTemplates();
+    } catch (err) {
+      showToast(err.message || 'Error al actualizar', 'error');
+    }
   }
 
   function confirmDeleteTemplate(id, name) {
@@ -964,6 +991,9 @@ const App = (() => {
         return;
       }
 
+      // Store logs for detail modal access
+      cachedAuditLogs = logs;
+
       list.innerHTML = `
         <table class="table">
           <thead>
@@ -972,14 +1002,14 @@ const App = (() => {
             </tr>
           </thead>
           <tbody>
-            ${logs.map(l => `
+            ${logs.map((l, i) => `
               <tr>
                 <td>${formatDate(l.created_at)}</td>
                 <td>${esc(l.username || '-')}</td>
                 <td><span class="badge badge-user">${esc(l.action)}</span></td>
                 <td>${esc(l.resource_type || '')} ${l.resource_id ? '#' + esc(l.resource_id) : ''}</td>
                 <td>${esc(l.ip_address || '')}</td>
-                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${l.details ? esc(JSON.stringify(l.details)) : ''}</td>
+                <td>${l.details ? `<span class="audit-detail-cell" onclick="App.showAuditDetail(${i})">${esc(JSON.stringify(l.details))}</span>` : ''}</td>
               </tr>`).join('')}
           </tbody>
         </table>`;
@@ -994,6 +1024,27 @@ const App = (() => {
     } catch (err) {
       list.innerHTML = '<div class="empty">Error al cargar auditoria</div>';
     }
+  }
+
+  function showAuditDetail(index) {
+    const log = cachedAuditLogs[index];
+    if (!log) return;
+    const content = $('#audit-detail-content');
+    content.innerHTML = `
+      <div class="audit-detail-grid">
+        <span class="audit-detail-label">Fecha</span>
+        <span class="audit-detail-value">${formatDate(log.created_at)}</span>
+        <span class="audit-detail-label">Usuario</span>
+        <span class="audit-detail-value">${esc(log.username || '-')}</span>
+        <span class="audit-detail-label">Accion</span>
+        <span class="audit-detail-value"><span class="badge badge-user">${esc(log.action)}</span></span>
+        <span class="audit-detail-label">Recurso</span>
+        <span class="audit-detail-value">${esc(log.resource_type || '')} ${log.resource_id ? '#' + esc(log.resource_id) : ''}</span>
+        <span class="audit-detail-label">IP</span>
+        <span class="audit-detail-value">${esc(log.ip_address || '')}</span>
+      </div>
+      ${log.details ? '<div class="audit-detail-json">' + esc(JSON.stringify(log.details, null, 2)) + '</div>' : ''}`;
+    show($('#audit-detail-modal'));
   }
 
   function goAuditPage(page) {
@@ -1610,6 +1661,146 @@ const App = (() => {
     });
   }
 
+  // --- Emoji Picker ---
+  function initEmojiPicker() {
+    // Event delegation for trigger buttons
+    document.addEventListener('click', (e) => {
+      const trigger = e.target.closest('.btn-emoji-trigger');
+      if (trigger) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleEmojiPicker(trigger, trigger.dataset.target);
+        return;
+      }
+      // Click on emoji item
+      const emojiItem = e.target.closest('.emoji-picker-item');
+      if (emojiItem) {
+        insertEmojiAtCursor(emojiItem.textContent);
+        return;
+      }
+      // Click on tab
+      const tab = e.target.closest('.emoji-picker-tab');
+      if (tab) {
+        emojiPickerCategory = parseInt(tab.dataset.index);
+        $$('.emoji-picker-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        renderEmojiGrid();
+        return;
+      }
+      // Click outside closes picker
+      const picker = $('#emoji-picker');
+      if (!picker.classList.contains('hidden') && !picker.contains(e.target)) {
+        closeEmojiPicker();
+      }
+    });
+
+    // Escape closes picker
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeEmojiPicker();
+    });
+
+    // Render tabs once
+    const tabsContainer = $('#emoji-picker-tabs');
+    tabsContainer.innerHTML = EMOJI_DATA.map((cat, i) =>
+      `<button type="button" class="emoji-picker-tab${i === 0 ? ' active' : ''}" data-index="${i}" title="${esc(cat.name)}">${cat.icon}</button>`
+    ).join('');
+  }
+
+  function toggleEmojiPicker(btn, targetId) {
+    const picker = $('#emoji-picker');
+    if (!picker.classList.contains('hidden') && emojiPickerTarget === targetId) {
+      closeEmojiPicker();
+      return;
+    }
+    emojiPickerTarget = targetId;
+    emojiPickerCategory = 0;
+    $$('.emoji-picker-tab').forEach((t, i) => t.classList.toggle('active', i === 0));
+    renderEmojiGrid();
+    positionEmojiPicker(btn);
+    show(picker);
+  }
+
+  function positionEmojiPicker(btn) {
+    const picker = $('#emoji-picker');
+    const rect = btn.getBoundingClientRect();
+    let top = rect.bottom + 4;
+    let left = rect.left;
+
+    // Keep within viewport
+    const pickerWidth = 280;
+    const pickerHeight = 280;
+    if (left + pickerWidth > window.innerWidth) {
+      left = window.innerWidth - pickerWidth - 8;
+    }
+    if (left < 4) left = 4;
+    if (top + pickerHeight > window.innerHeight) {
+      top = rect.top - pickerHeight - 4;
+    }
+
+    picker.style.top = top + 'px';
+    picker.style.left = left + 'px';
+  }
+
+  function closeEmojiPicker() {
+    hide($('#emoji-picker'));
+    emojiPickerTarget = null;
+  }
+
+  function renderEmojiGrid() {
+    const grid = $('#emoji-picker-grid');
+    const emojis = EMOJI_DATA[emojiPickerCategory].emojis;
+    grid.innerHTML = emojis.map(e =>
+      `<button type="button" class="emoji-picker-item">${e}</button>`
+    ).join('');
+  }
+
+  function insertEmojiAtCursor(emoji) {
+    if (!emojiPickerTarget) return;
+    const textarea = $('#' + emojiPickerTarget);
+    if (!textarea) return;
+    textarea.focus();
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const val = textarea.value;
+    textarea.value = val.substring(0, start) + emoji + val.substring(end);
+    const newPos = start + emoji.length;
+    textarea.setSelectionRange(newPos, newPos);
+  }
+
+  // --- Text Formatting (WhatsApp style) ---
+  function initFormatToolbar() {
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn-format');
+      if (!btn) return;
+      e.preventDefault();
+      const targetId = btn.dataset.target;
+      const wrap = btn.dataset.wrap;
+      if (targetId && wrap) formatText(targetId, wrap);
+    });
+  }
+
+  function formatText(targetId, wrap) {
+    const textarea = $('#' + targetId);
+    if (!textarea) return;
+    textarea.focus();
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const val = textarea.value;
+    const selected = val.substring(start, end);
+
+    if (selected) {
+      // Wrap selected text
+      const replacement = wrap + selected + wrap;
+      textarea.value = val.substring(0, start) + replacement + val.substring(end);
+      textarea.setSelectionRange(start + wrap.length, start + wrap.length + selected.length);
+    } else {
+      // Insert wrap chars and place cursor between them
+      textarea.value = val.substring(0, start) + wrap + wrap + val.substring(end);
+      const cursorPos = start + wrap.length;
+      textarea.setSelectionRange(cursorPos, cursorPos);
+    }
+  }
+
   // --- Modals ---
   function closeModal(id) {
     hide($('#' + id));
@@ -1623,33 +1814,41 @@ const App = (() => {
   }
 
   // --- Init ---
+  function on(sel, event, handler) {
+    const el = $(sel);
+    if (el) el.addEventListener(event, handler);
+  }
+
   async function init() {
     // Event listeners
-    $('#login-form').addEventListener('submit', handleLogin);
-    $('#change-password-form').addEventListener('submit', handleChangePassword);
-    $('#create-instance-form').addEventListener('submit', handleCreateInstance);
-    $('#send-message-form').addEventListener('submit', handleSendMessage);
-    $('#bulk-message-form').addEventListener('submit', handleBulkMessage);
-    $('#bulk-cancel-btn').addEventListener('click', () => {
+    on('#login-form', 'submit', handleLogin);
+    on('#change-password-form', 'submit', handleChangePassword);
+    on('#create-instance-form', 'submit', handleCreateInstance);
+    on('#send-message-form', 'submit', handleSendMessage);
+    on('#bulk-message-form', 'submit', handleBulkMessage);
+    on('#bulk-cancel-btn', 'click', () => {
       API.cancelBulk();
       $('#bulk-cancel-btn').disabled = true;
       $('#bulk-cancel-btn').textContent = 'Cancelando...';
     });
-    $('#create-template-form').addEventListener('submit', handleCreateTemplate);
-    $('#create-contact-list-form').addEventListener('submit', handleCreateContactList);
-    $('#bulk-load-contacts-btn').addEventListener('click', openLoadContactsModal);
+    on('#create-template-form', 'submit', handleCreateTemplate);
+    on('#edit-template-form', 'submit', handleUpdateTemplate);
+    on('#create-contact-list-form', 'submit', handleCreateContactList);
+    on('#bulk-load-contacts-btn', 'click', openLoadContactsModal);
     handleTemplateSelect('#msg-template', '#msg-text');
     handleTemplateSelect('#bulk-template', '#bulk-text');
-    $('#hist-filter-btn').addEventListener('click', () => { historyPage = 1; loadHistory(); });
-    $('#audit-filter-btn').addEventListener('click', () => { auditPage = 1; loadAuditLogs(); });
-    $('#backup-create-btn').addEventListener('click', handleCreateBackup);
-    $('#btn-theme-toggle').addEventListener('click', toggleTheme);
-    $('#create-user-form').addEventListener('submit', handleCreateUser);
-    $('#edit-user-form').addEventListener('submit', handleUpdateUser);
-    $('#create-incident-form').addEventListener('submit', handleCreateIncident);
-    $('#incident-update-form').addEventListener('submit', handleIncidentUpdate);
-    $('#create-maintenance-form').addEventListener('submit', handleCreateMaintenance);
-    $('#btn-logout').addEventListener('click', logout);
+    on('#hist-filter-btn', 'click', () => { historyPage = 1; loadHistory(); });
+    on('#audit-filter-btn', 'click', () => { auditPage = 1; loadAuditLogs(); });
+    on('#backup-create-btn', 'click', handleCreateBackup);
+    on('#btn-theme-toggle', 'click', toggleTheme);
+    initEmojiPicker();
+    initFormatToolbar();
+    on('#create-user-form', 'submit', handleCreateUser);
+    on('#edit-user-form', 'submit', handleUpdateUser);
+    on('#create-incident-form', 'submit', handleCreateIncident);
+    on('#incident-update-form', 'submit', handleIncidentUpdate);
+    on('#create-maintenance-form', 'submit', handleCreateMaintenance);
+    on('#btn-logout', 'click', logout);
     initTheme();
 
     $$('.nav-link').forEach(link => {
@@ -1703,6 +1902,7 @@ const App = (() => {
     goHistoryPage,
     revokeSessionAction,
     goAuditPage,
+    showAuditDetail,
     editUser,
     confirmDeleteUser,
     openIncidentUpdate,
@@ -1710,6 +1910,7 @@ const App = (() => {
     startMaintenance,
     completeMaintenance,
     confirmDeleteMaintenance,
+    handleCreateTemplate,
     closeModal,
     toggleDocsGroup,
     toggleEndpoint,
