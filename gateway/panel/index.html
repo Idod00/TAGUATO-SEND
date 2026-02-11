@@ -69,6 +69,7 @@
         <a href="#" class="nav-link" data-section="templates">Plantillas</a>
         <a href="#" class="nav-link" data-section="contacts">Contactos</a>
         <a href="#" class="nav-link" data-section="history">Historial</a>
+        <a href="#" class="nav-link" data-section="scheduled">Programados</a>
         <a href="#" class="nav-link" data-section="sessions">Sesiones</a>
         <a href="#" class="nav-link" data-section="docs">API Docs</a>
         <a href="#" class="nav-link hidden" id="nav-status" data-section="status">Status</a>
@@ -292,6 +293,94 @@
         </div>
         <div id="history-list"></div>
         <div id="history-pagination" style="margin-top:0.75rem;display:flex;gap:0.5rem;justify-content:center;"></div>
+      </div>
+
+      <!-- Scheduled Messages Section -->
+      <div id="section-scheduled" class="section hidden">
+        <h2>Mensajes Programados</h2>
+
+        <form id="create-scheduled-form" class="msg-form">
+          <div class="form-group">
+            <label for="sched-instance">Instancia</label>
+            <select id="sched-instance" class="form-control" required>
+              <option value="">Seleccionar instancia...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="sched-numbers">Destinatarios (uno por linea)</label>
+            <textarea id="sched-numbers" class="form-control" rows="4" placeholder="595981123456&#10;595982654321" required></textarea>
+            <div class="bulk-hint" style="display:flex;align-items:center;justify-content:space-between;">
+              <span>Maximo 500 numeros</span>
+              <button type="button" id="sched-load-contacts-btn" class="btn btn-sm btn-secondary">Cargar lista</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Tipo de mensaje</label>
+            <select id="sched-msg-type" class="form-control">
+              <option value="text">Texto</option>
+              <option value="image">Imagen</option>
+              <option value="document">Documento</option>
+              <option value="audio">Audio</option>
+              <option value="video">Video</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="sched-template">Plantilla (opcional)</label>
+            <select id="sched-template" class="form-control">
+              <option value="">Sin plantilla</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="sched-content">Mensaje</label>
+            <div class="textarea-toolbar">
+              <button type="button" class="btn-format btn-format-bold" data-target="sched-content" data-wrap="*" title="Negrita *texto*">B</button>
+              <button type="button" class="btn-format btn-format-italic" data-target="sched-content" data-wrap="_" title="Cursiva _texto_">I</button>
+              <button type="button" class="btn-format btn-format-strike" data-target="sched-content" data-wrap="~" title="Tachado ~texto~">S</button>
+              <button type="button" class="btn-format btn-format-mono" data-target="sched-content" data-wrap="```" title="Monoespaciado ```texto```">&lt;/&gt;</button>
+              <span class="toolbar-sep"></span>
+              <button type="button" class="btn-emoji-trigger" data-target="sched-content" title="Insertar emoji">&#x1F600;</button>
+            </div>
+            <textarea id="sched-content" class="form-control" rows="4" required></textarea>
+          </div>
+          <div id="sched-media-fields" class="hidden">
+            <div class="form-group">
+              <label for="sched-media-url">URL del media</label>
+              <input type="text" id="sched-media-url" class="form-control" placeholder="https://example.com/image.jpg">
+            </div>
+            <div class="form-group">
+              <label for="sched-media-caption">Caption (opcional)</label>
+              <input type="text" id="sched-media-caption" class="form-control" placeholder="Descripcion del archivo">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="sched-datetime">Fecha y hora de envio</label>
+            <input type="datetime-local" id="sched-datetime" class="form-control" required>
+          </div>
+          <button type="submit" id="sched-create-btn" class="btn btn-primary">Programar Envio</button>
+        </form>
+
+        <div class="bulk-divider">Mensajes programados</div>
+
+        <div class="admin-create-form" style="grid-template-columns:1fr auto;margin-bottom:1rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="sched-filter-status">Estado</label>
+            <select id="sched-filter-status" class="form-control">
+              <option value="">Todos</option>
+              <option value="pending">Pendiente</option>
+              <option value="processing">Enviando</option>
+              <option value="completed">Completado</option>
+              <option value="failed">Fallido</option>
+              <option value="cancelled">Cancelado</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>&nbsp;</label>
+            <button type="button" id="sched-filter-btn" class="btn btn-primary btn-sm" style="width:100%;">Filtrar</button>
+          </div>
+        </div>
+
+        <div id="scheduled-list"></div>
+        <div id="scheduled-pagination" style="margin-top:0.75rem;display:flex;gap:0.5rem;justify-content:center;"></div>
       </div>
 
       <!-- Sessions Section -->
@@ -599,6 +688,24 @@
       <button class="modal-close" title="Cerrar">&times;</button>
       <h3>Cargar Lista de Contactos</h3>
       <div id="load-contacts-list"></div>
+    </div>
+  </div>
+
+  <!-- Scheduled Detail Modal -->
+  <div id="scheduled-detail-modal" class="modal hidden">
+    <div class="modal-box" style="max-width:600px;">
+      <button class="modal-close" title="Cerrar">&times;</button>
+      <h3>Detalle de Envio Programado</h3>
+      <div id="scheduled-detail-content"></div>
+    </div>
+  </div>
+
+  <!-- Load Contacts for Scheduled Modal -->
+  <div id="sched-load-contacts-modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" title="Cerrar">&times;</button>
+      <h3>Cargar Lista de Contactos</h3>
+      <div id="sched-load-contacts-list"></div>
     </div>
   </div>
 

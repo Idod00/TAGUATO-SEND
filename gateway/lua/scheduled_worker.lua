@@ -1,0 +1,162 @@
+-- Scheduled messages worker
+-- Runs on a timer, picks up pending messages and sends them
+
+local _M = {}
+
+function _M.check()
+    local http = require "resty.http"
+    local cjson = require "cjson"
+    local db = require "init"
+
+    local api_key = os.getenv("AUTHENTICATION_API_KEY")
+    if not api_key then
+        ngx.log(ngx.ERR, "scheduled_worker: AUTHENTICATION_API_KEY not set")
+        return
+    end
+
+    -- Fetch pending messages that are due
+    local pending, err = db.query(
+        [[SELECT id, user_id, instance_name, message_type, message_content, recipients, scheduled_at
+          FROM taguato.scheduled_messages
+          WHERE status = 'pending' AND scheduled_at <= NOW()
+          ORDER BY scheduled_at ASC
+          LIMIT 5]]
+    )
+
+    if not pending or #pending == 0 then
+        return
+    end
+
+    for _, msg in ipairs(pending) do
+        -- Mark as processing
+        db.query(
+            "UPDATE taguato.scheduled_messages SET status = 'processing', updated_at = NOW() WHERE id = $1",
+            msg.id
+        )
+
+        local ok_parse, recipients = pcall(cjson.decode, msg.recipients)
+        if not ok_parse or type(recipients) ~= "table" then
+            ngx.log(ngx.ERR, "scheduled_worker: invalid recipients JSON for message ", msg.id)
+            db.query(
+                "UPDATE taguato.scheduled_messages SET status = 'failed', results = $1, updated_at = NOW() WHERE id = $2",
+                cjson.encode({ total = 0, sent = 0, failed = 0, errors = { "Invalid recipients JSON" } }),
+                msg.id
+            )
+            goto continue
+        end
+
+        local total = #recipients
+        local sent_count = 0
+        local failed_count = 0
+        local errors = {}
+
+        for i, number in ipairs(recipients) do
+            number = tostring(number):gsub("^%s+", ""):gsub("%s+$", "")
+            if number == "" then
+                goto next_recipient
+            end
+
+            local httpc = http.new()
+            httpc:set_timeout(10000)
+
+            local send_ok = false
+            local send_err = nil
+
+            if msg.message_type == "text" then
+                local res, req_err = httpc:request_uri(
+                    "http://taguato-api:8080/message/sendText/" .. msg.instance_name,
+                    {
+                        method = "POST",
+                        headers = {
+                            ["apikey"] = api_key,
+                            ["Content-Type"] = "application/json",
+                        },
+                        body = cjson.encode({ number = number, text = msg.message_content }),
+                    }
+                )
+                if res and res.status >= 200 and res.status < 300 then
+                    send_ok = true
+                else
+                    send_err = req_err or (res and "status " .. res.status) or "unknown error"
+                end
+            else
+                -- Media message: message_content is JSON with media details
+                local media_ok, media_body = pcall(cjson.decode, msg.message_content)
+                if media_ok and type(media_body) == "table" then
+                    media_body.number = number
+                    local res, req_err = httpc:request_uri(
+                        "http://taguato-api:8080/message/sendMedia/" .. msg.instance_name,
+                        {
+                            method = "POST",
+                            headers = {
+                                ["apikey"] = api_key,
+                                ["Content-Type"] = "application/json",
+                            },
+                            body = cjson.encode(media_body),
+                        }
+                    )
+                    if res and res.status >= 200 and res.status < 300 then
+                        send_ok = true
+                    else
+                        send_err = req_err or (res and "status " .. res.status) or "unknown error"
+                    end
+                else
+                    send_err = "invalid media content JSON"
+                end
+            end
+
+            if send_ok then
+                sent_count = sent_count + 1
+                -- Log to message_logs
+                db.query(
+                    [[INSERT INTO taguato.message_logs (user_id, instance_name, phone_number, message_type, status)
+                      VALUES ($1, $2, $3, $4, 'sent')]],
+                    msg.user_id, msg.instance_name, number, msg.message_type
+                )
+            else
+                failed_count = failed_count + 1
+                errors[#errors + 1] = number .. ": " .. (send_err or "unknown")
+                db.query(
+                    [[INSERT INTO taguato.message_logs (user_id, instance_name, phone_number, message_type, status, error_message)
+                      VALUES ($1, $2, $3, $4, 'failed', $5)]],
+                    msg.user_id, msg.instance_name, number, msg.message_type, send_err
+                )
+            end
+
+            -- Delay between sends (1 second)
+            if i < total then
+                ngx.sleep(1)
+            end
+
+            ::next_recipient::
+        end
+
+        -- Update final status
+        local final_status = (failed_count == total) and "failed" or "completed"
+        local results = cjson.encode({
+            total = total,
+            sent = sent_count,
+            failed = failed_count,
+            errors = errors,
+        })
+
+        db.query(
+            "UPDATE taguato.scheduled_messages SET status = $1, results = $2, updated_at = NOW() WHERE id = $3",
+            final_status, results, msg.id
+        )
+
+        ngx.log(ngx.INFO, "scheduled_worker: message ", msg.id, " ", final_status,
+                " (sent=", sent_count, " failed=", failed_count, ")")
+
+        ::continue::
+    end
+
+    -- Cleanup: delete completed/cancelled/failed messages older than 30 days
+    db.query(
+        [[DELETE FROM taguato.scheduled_messages
+          WHERE status IN ('completed', 'cancelled', 'failed')
+          AND updated_at < NOW() - INTERVAL '30 days']]
+    )
+end
+
+return _M

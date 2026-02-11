@@ -9,6 +9,7 @@ const App = (() => {
   let historyPage = 1;
   let auditPage = 1;
   let cachedAuditLogs = [];
+  let scheduledPage = 1;
   let emojiPickerTarget = null;
   let emojiPickerCategory = 0;
 
@@ -84,6 +85,7 @@ const App = (() => {
     if (section === 'templates') loadTemplates();
     if (section === 'contacts') loadContactLists();
     if (section === 'history') { historyPage = 1; loadHistory(); }
+    if (section === 'scheduled') { scheduledPage = 1; loadScheduledSection(); }
     if (section === 'sessions') loadSessions();
     if (section === 'docs') renderDocs();
     if (section === 'admin') loadUsers();
@@ -839,6 +841,301 @@ const App = (() => {
   function goHistoryPage(page) {
     historyPage = page;
     loadHistory();
+  }
+
+  // --- Scheduled Messages ---
+  function loadScheduledSection() {
+    // Populate instance select
+    const sel = $('#sched-instance');
+    if (sel) {
+      sel.innerHTML = '<option value="">Seleccionar instancia...</option>';
+      instances.forEach(inst => {
+        const name = inst.instance?.instanceName || inst.name || inst.instanceName || '';
+        if (name) {
+          sel.innerHTML += `<option value="${esc(name)}">${esc(name)}</option>`;
+        }
+      });
+    }
+    // Populate template select
+    const tplSel = $('#sched-template');
+    if (tplSel) {
+      tplSel.innerHTML = '<option value="">Sin plantilla</option>';
+      cachedTemplates.forEach(t => {
+        tplSel.innerHTML += `<option value="${t.id}">${esc(t.name)}</option>`;
+      });
+    }
+    // Set minimum datetime to now
+    const dtInput = $('#sched-datetime');
+    if (dtInput) {
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      dtInput.min = now.toISOString().slice(0, 16);
+    }
+    loadScheduled();
+  }
+
+  async function loadScheduled() {
+    const list = $('#scheduled-list');
+    const pagination = $('#scheduled-pagination');
+    list.innerHTML = '<div class="loading">Cargando mensajes programados...</div>';
+    pagination.innerHTML = '';
+
+    const params = { page: scheduledPage, limit: 20 };
+    const status = $('#sched-filter-status');
+    if (status && status.value) params.status = status.value;
+
+    try {
+      const data = await API.listScheduled(params);
+      const messages = data.messages || [];
+      if (messages.length === 0) {
+        list.innerHTML = '<div class="empty">No hay mensajes programados</div>';
+        return;
+      }
+      renderScheduled(messages);
+
+      if (data.pages > 1) {
+        let html = '';
+        for (let p = 1; p <= data.pages; p++) {
+          html += `<button class="btn btn-sm ${p === data.page ? 'btn-primary' : 'btn-secondary'}" onclick="App.goScheduledPage(${p})">${p}</button>`;
+        }
+        pagination.innerHTML = html;
+      }
+    } catch (err) {
+      list.innerHTML = '<div class="empty">Error al cargar mensajes programados</div>';
+    }
+  }
+
+  function getScheduledBadge(status) {
+    const map = {
+      pending: { cls: 'badge-warning', label: 'Pendiente' },
+      processing: { cls: 'badge-info', label: 'Enviando...' },
+      completed: { cls: 'badge-connected', label: 'Completado' },
+      failed: { cls: 'badge-disconnected', label: 'Fallido' },
+      cancelled: { cls: 'badge-user', label: 'Cancelado' },
+    };
+    const m = map[status] || { cls: 'badge-user', label: status };
+    return `<span class="badge ${m.cls}">${m.label}</span>`;
+  }
+
+  function renderScheduled(messages) {
+    const list = $('#scheduled-list');
+    list.innerHTML = `
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Fecha envio</th><th>Instancia</th><th>Tipo</th><th>Destinatarios</th><th>Estado</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${messages.map(m => {
+            let recipientCount = 0;
+            try {
+              const r = typeof m.recipients === 'string' ? JSON.parse(m.recipients) : m.recipients;
+              recipientCount = Array.isArray(r) ? r.length : 0;
+            } catch { recipientCount = 0; }
+            return `
+              <tr>
+                <td>${formatDate(m.scheduled_at)}</td>
+                <td>${esc(m.instance_name)}</td>
+                <td>${esc(m.message_type)}</td>
+                <td>${recipientCount} numero(s)</td>
+                <td>${getScheduledBadge(m.status)}</td>
+                <td>
+                  <button class="btn btn-sm btn-secondary" onclick="App.viewScheduledDetail(${m.id})">Ver</button>
+                  ${m.status === 'pending' ? `<button class="btn btn-sm btn-danger" onclick="App.cancelScheduledMessage(${m.id})">Cancelar</button>` : ''}
+                </td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>`;
+  }
+
+  async function handleCreateScheduled(e) {
+    e.preventDefault();
+    const instanceName = $('#sched-instance').value;
+    const numbersRaw = $('#sched-numbers').value.trim();
+    const msgType = $('#sched-msg-type').value;
+    const content = $('#sched-content').value.trim();
+    const scheduledAt = $('#sched-datetime').value;
+
+    if (!instanceName || !numbersRaw || !content || !scheduledAt) {
+      showToast('Completa todos los campos', 'error');
+      return;
+    }
+
+    const numbers = numbersRaw.split('\n').map(n => n.trim()).filter(n => n);
+    if (numbers.length === 0) {
+      showToast('Ingresa al menos un numero', 'error');
+      return;
+    }
+    if (numbers.length > 500) {
+      showToast('Maximo 500 numeros permitidos', 'error');
+      return;
+    }
+
+    // Check scheduled_at is in the future
+    if (new Date(scheduledAt) <= new Date()) {
+      showToast('La fecha debe ser en el futuro', 'error');
+      return;
+    }
+
+    let messageContent = content;
+    // For media types, build JSON content
+    if (msgType !== 'text') {
+      const mediaUrl = $('#sched-media-url').value.trim();
+      const caption = $('#sched-media-caption').value.trim();
+      if (!mediaUrl) {
+        showToast('URL del media es requerida para tipo ' + msgType, 'error');
+        return;
+      }
+      messageContent = JSON.stringify({
+        mediatype: msgType,
+        media: mediaUrl,
+        caption: caption || undefined,
+      });
+    }
+
+    const btn = $('#sched-create-btn');
+    btn.disabled = true;
+    btn.textContent = 'Programando...';
+
+    try {
+      await API.createScheduled({
+        instance_name: instanceName,
+        message_type: msgType,
+        message_content: messageContent,
+        recipients: numbers,
+        scheduled_at: scheduledAt,
+      });
+      showToast('Envio programado exitosamente');
+      $('#sched-numbers').value = '';
+      $('#sched-content').value = '';
+      $('#sched-datetime').value = '';
+      $('#sched-media-url').value = '';
+      $('#sched-media-caption').value = '';
+      loadScheduled();
+    } catch (err) {
+      showToast(err.message || 'Error al programar envio', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Programar Envio';
+    }
+  }
+
+  async function viewScheduledDetail(id) {
+    const content = $('#scheduled-detail-content');
+    content.innerHTML = '<div class="loading">Cargando...</div>';
+    show($('#scheduled-detail-modal'));
+
+    try {
+      const data = await API.getScheduled(id);
+      const m = data.message;
+      let recipients = [];
+      try {
+        recipients = typeof m.recipients === 'string' ? JSON.parse(m.recipients) : m.recipients;
+      } catch { recipients = []; }
+
+      let results = m.results;
+      if (typeof results === 'string') {
+        try { results = JSON.parse(results); } catch { results = null; }
+      }
+
+      content.innerHTML = `
+        <div class="audit-detail-grid">
+          <span class="audit-detail-label">Instancia</span>
+          <span class="audit-detail-value">${esc(m.instance_name)}</span>
+          <span class="audit-detail-label">Tipo</span>
+          <span class="audit-detail-value">${esc(m.message_type)}</span>
+          <span class="audit-detail-label">Estado</span>
+          <span class="audit-detail-value">${getScheduledBadge(m.status)}</span>
+          <span class="audit-detail-label">Fecha programada</span>
+          <span class="audit-detail-value">${formatDate(m.scheduled_at)}</span>
+          <span class="audit-detail-label">Creado</span>
+          <span class="audit-detail-value">${formatDate(m.created_at)}</span>
+          <span class="audit-detail-label">Destinatarios</span>
+          <span class="audit-detail-value">${recipients.length} numero(s)</span>
+        </div>
+        <div style="margin-top:0.75rem;">
+          <strong>Mensaje:</strong>
+          <div style="background:var(--bg);padding:0.5rem;border-radius:6px;margin-top:0.25rem;white-space:pre-wrap;font-size:0.85rem;">${esc(m.message_content)}</div>
+        </div>
+        <div style="margin-top:0.75rem;">
+          <details>
+            <summary style="cursor:pointer;font-size:0.85rem;">Ver destinatarios (${recipients.length})</summary>
+            <div style="max-height:150px;overflow-y:auto;font-size:0.85rem;margin-top:0.25rem;">${recipients.map(r => esc(r)).join('<br>')}</div>
+          </details>
+        </div>
+        ${results ? `
+          <div style="margin-top:0.75rem;">
+            <strong>Resultados:</strong>
+            <div style="display:flex;gap:1rem;margin-top:0.25rem;">
+              <span>Total: ${results.total}</span>
+              <span style="color:var(--success);">Enviados: ${results.sent}</span>
+              <span style="color:var(--danger);">Fallidos: ${results.failed}</span>
+            </div>
+            ${results.errors && results.errors.length > 0 ? `
+              <details style="margin-top:0.5rem;">
+                <summary style="cursor:pointer;font-size:0.85rem;color:var(--danger);">Ver errores (${results.errors.length})</summary>
+                <ul style="font-size:0.85rem;margin-top:0.25rem;">${results.errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul>
+              </details>` : ''}
+          </div>` : ''}`;
+    } catch (err) {
+      content.innerHTML = `<div class="empty">Error al cargar detalle</div>`;
+    }
+  }
+
+  function cancelScheduledMessage(id) {
+    if (!confirm('Cancelar este envio programado?')) return;
+    API.cancelScheduled(id)
+      .then(() => { showToast('Envio cancelado'); loadScheduled(); })
+      .catch(err => showToast(err.message || 'Error al cancelar', 'error'));
+  }
+
+  function goScheduledPage(page) {
+    scheduledPage = page;
+    loadScheduled();
+  }
+
+  async function openSchedLoadContactsModal() {
+    const list = $('#sched-load-contacts-list');
+    list.innerHTML = '<div class="loading">Cargando listas...</div>';
+    show($('#sched-load-contacts-modal'));
+    try {
+      const data = await API.listContactLists();
+      const lists = data.lists || [];
+      if (lists.length === 0) {
+        list.innerHTML = '<div class="empty">No hay listas de contactos</div>';
+        return;
+      }
+      list.innerHTML = lists.map(cl => `
+        <div class="card instance-card" style="cursor:pointer;" onclick="App.loadContactsIntoSchedNumbers(${cl.id})">
+          <div class="instance-info">
+            <h3>${esc(cl.name)}</h3>
+            <span class="badge badge-user">${cl.item_count || 0} contactos</span>
+          </div>
+        </div>
+      `).join('');
+    } catch {
+      list.innerHTML = '<div class="empty">Error al cargar listas</div>';
+    }
+  }
+
+  async function loadContactsIntoSchedNumbers(listId) {
+    try {
+      const data = await API.getContactList(listId);
+      const items = data.list.items || [];
+      const numbers = items.map(i => i.phone_number).join('\n');
+      const textarea = $('#sched-numbers');
+      if (textarea.value.trim()) {
+        textarea.value += '\n' + numbers;
+      } else {
+        textarea.value = numbers;
+      }
+      closeModal('sched-load-contacts-modal');
+      showToast(items.length + ' contactos cargados');
+    } catch (err) {
+      showToast(err.message || 'Error al cargar contactos', 'error');
+    }
   }
 
   // --- Sessions ---
@@ -1838,6 +2135,22 @@ const App = (() => {
     handleTemplateSelect('#msg-template', '#msg-text');
     handleTemplateSelect('#bulk-template', '#bulk-text');
     on('#hist-filter-btn', 'click', () => { historyPage = 1; loadHistory(); });
+    on('#create-scheduled-form', 'submit', handleCreateScheduled);
+    on('#sched-filter-btn', 'click', () => { scheduledPage = 1; loadScheduled(); });
+    on('#sched-load-contacts-btn', 'click', openSchedLoadContactsModal);
+    handleTemplateSelect('#sched-template', '#sched-content');
+    // Toggle media fields for scheduled
+    const schedMsgType = $('#sched-msg-type');
+    if (schedMsgType) {
+      schedMsgType.addEventListener('change', () => {
+        const mediaFields = $('#sched-media-fields');
+        if (schedMsgType.value !== 'text') {
+          show(mediaFields);
+        } else {
+          hide(mediaFields);
+        }
+      });
+    }
     on('#audit-filter-btn', 'click', () => { auditPage = 1; loadAuditLogs(); });
     on('#backup-create-btn', 'click', handleCreateBackup);
     on('#btn-theme-toggle', 'click', toggleTheme);
@@ -1900,6 +2213,10 @@ const App = (() => {
     loadContactsIntoNumbers,
     setMsgType,
     goHistoryPage,
+    goScheduledPage,
+    viewScheduledDetail,
+    cancelScheduledMessage,
+    loadContactsIntoSchedNumbers,
     revokeSessionAction,
     goAuditPage,
     showAuditDetail,

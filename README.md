@@ -1,41 +1,142 @@
-# TAGUATO-SEND
+<p align="center">
+  <img src="gateway/panel/img/logo.png" alt="TAGUATO-SEND" width="120">
+</p>
 
-Sistema de envío de mensajes automáticos por WhatsApp con gateway multi-tenant y API REST.
+<h1 align="center">TAGUATO-SEND</h1>
 
-Basado en [Evolution API](https://github.com/EvolutionAPI/evolution-api) con un gateway OpenResty que agrega autenticación multi-usuario y control de acceso por instancia.
+<p align="center">
+  <strong>Plataforma multi-tenant de mensajeria WhatsApp con gateway inteligente y panel de gestion</strong>
+</p>
 
-## Requisitos
+<p align="center">
+  <a href="#-inicio-rapido">Inicio Rapido</a> &bull;
+  <a href="#-features">Features</a> &bull;
+  <a href="#%EF%B8%8F-arquitectura">Arquitectura</a> &bull;
+  <a href="#-panel-de-gestion">Panel</a> &bull;
+  <a href="#-api-rest">API</a> &bull;
+  <a href="#-documentacion">Docs</a>
+</p>
 
-- Docker y Docker Compose
-- Puerto 80 (Gateway), 5432 (PostgreSQL), 6379 (Redis) disponibles
+<p align="center">
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" alt="Docker">
+  <img src="https://img.shields.io/badge/OpenResty-Gateway-4FC08D?logo=nginx&logoColor=white" alt="OpenResty">
+  <img src="https://img.shields.io/badge/Evolution_API-v2.3.7-25D366?logo=whatsapp&logoColor=white" alt="Evolution API">
+  <img src="https://img.shields.io/badge/PostgreSQL-15-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Redis-Cache-DC382D?logo=redis&logoColor=white" alt="Redis">
+  <img src="https://img.shields.io/badge/Lua-Scripting-2C2D72?logo=lua&logoColor=white" alt="Lua">
+</p>
+
+---
+
+## Que es TAGUATO-SEND?
+
+TAGUATO-SEND es una plataforma completa para gestionar envios de mensajes por WhatsApp. Construida sobre [Evolution API](https://github.com/EvolutionAPI/evolution-api), agrega un gateway inteligente con OpenResty que permite administrar multiples usuarios, cada uno con sus propias instancias de WhatsApp, limites y permisos.
+
+Todo se despliega con un solo comando via Docker Compose. Incluye un panel web completo para que los usuarios gestionen sus instancias, envien mensajes (individuales, masivos y programados), y el administrador controle todo el sistema.
+
+---
+
+## Features
+
+### Mensajeria
+- **Envio individual** &mdash; Texto y multimedia (imagen, documento, audio, video)
+- **Envio masivo** &mdash; Hasta 500 destinatarios con barra de progreso y cancelacion
+- **Envios programados** &mdash; Agenda mensajes para fecha/hora futura, ejecutados server-side por un worker automatico
+- **Plantillas** &mdash; Mensajes reutilizables con formato WhatsApp (negrita, cursiva, tachado, monoespaciado)
+- **Listas de contactos** &mdash; Organiza destinatarios en listas reutilizables
+
+### Multi-tenant
+- **Aislamiento por usuario** &mdash; Cada usuario solo ve y opera sus propias instancias
+- **Limite de instancias** &mdash; Configurable por usuario (`max_instances`)
+- **Rate limiting** &mdash; Global y por usuario, configurable
+- **Tokens unicos** &mdash; Cada usuario tiene su propio API token
+
+### Administracion
+- **Dashboard** &mdash; Metricas en tiempo real: usuarios, instancias, uptime
+- **Gestion de usuarios** &mdash; CRUD completo con roles (admin/user)
+- **Auditoria** &mdash; Log de todas las acciones administrativas con filtros
+- **Backups** &mdash; Creacion de backups de PostgreSQL desde el panel
+- **Sesiones** &mdash; Ver y revocar sesiones activas de cualquier usuario
+
+### Monitoreo
+- **Pagina de estado publica** &mdash; Muestra salud de los 4 servicios en tiempo real
+- **Auto-reconexion** &mdash; Worker que detecta instancias desconectadas y las reconecta automaticamente
+- **Incidentes** &mdash; Creacion y seguimiento con timeline de updates
+- **Mantenimientos programados** &mdash; Notificacion publica de ventanas de mantenimiento
+- **Uptime tracking** &mdash; Registro historico de disponibilidad
+
+### Panel Web
+- **Responsive** &mdash; Funciona en desktop y mobile
+- **Tema oscuro** &mdash; Toggle con persistencia en localStorage
+- **Emoji picker** &mdash; Selector de emojis integrado en todos los textareas
+- **Formato WhatsApp** &mdash; Toolbar de formateo rapido
+- **Documentacion API** &mdash; Referencia interactiva integrada en el panel
+
+---
 
 ## Arquitectura
 
 ```
-Cliente (puerto 80)
-    │
-    ▼
-┌─────────────────────────────┐
-│  OpenResty Gateway (:80)    │
-│  - Auth por token           │
-│  - Admin CRUD               │
-│  - Filtrado de instancias   │
-└──────────┬──────────────────┘
-           │ (red interna)
-    ┌──────┼──────────┐
-    ▼      ▼          ▼
- API:8080  PG:5432  Redis:6379
+                         Puerto 80
+                            |
+                  +---------v----------+
+                  |                    |
+                  |   OpenResty        |
+                  |   Gateway          |
+                  |                    |
+                  |  - Auth por token  |
+                  |  - Multi-tenant    |
+                  |  - Rate limiting   |
+                  |  - Panel web       |
+                  |  - Workers         |
+                  |                    |
+                  +----+-----+--------+
+                       |     |
+              +--------+     +--------+
+              |                       |
+     +--------v--------+    +--------v--------+
+     |                  |    |                 |
+     |  Evolution API   |    |   PostgreSQL    |
+     |  (interno:8080)  |    |   (:5432)       |
+     |                  |    |                 |
+     |  WhatsApp Engine |    |  Usuarios       |
+     |  Baileys         |    |  Instancias     |
+     |                  |    |  Logs           |
+     +------------------+    |  Auditoria      |
+                             |  Templates      |
+              +---------+    |  Contactos      |
+              |         |    |  Programados    |
+     +--------v-------+ |   +-----------------+
+     |                 | |
+     |   Redis         | |
+     |   (:6379)       +-+
+     |                 |
+     |   Cache         |
+     +------------ ----+
 ```
 
-- **Admin**: acceso total a todas las instancias y gestión de usuarios
-- **Usuario**: acceso solo a sus propias instancias (limite configurable)
-- Formato de auth: `apikey: <token_del_usuario>`
+| Servicio | Puerto | Descripcion |
+|----------|--------|-------------|
+| **Gateway** | `80` | OpenResty - punto de entrada unico, panel web, API |
+| **Evolution API** | `8080` (interno) | Motor de WhatsApp via Baileys (no expuesto) |
+| **PostgreSQL** | `5432` | Base de datos principal con schema `taguato` |
+| **Redis** | `6379` | Cache y sesiones de WhatsApp |
 
-## Instalación
+---
+
+## Inicio Rapido
+
+### Requisitos
+
+- Docker y Docker Compose
+- Puerto 80 disponible
+
+### Instalacion
 
 ```bash
 # 1. Clonar el repositorio
-git clone <url-del-repo> && cd TAGUATO-SEND
+git clone https://github.com/Idod00/TAGUATO-SEND.git
+cd TAGUATO-SEND
 
 # 2. Configurar variables de entorno
 cp .env.example .env
@@ -48,276 +149,249 @@ cp .env.example .env
 docker compose logs taguato-postgres | grep "API Token"
 ```
 
-## Servicios
+> **Nota:** Guarda el token del admin, es tu clave de acceso para el panel y la API.
 
-| Servicio | Puerto | Descripción |
-|----------|--------|-------------|
-| Gateway | 80 | OpenResty - punto de entrada único |
-| API | 8080 (interno) | Evolution API (no expuesto) |
-| PostgreSQL | 5432 | Base de datos |
-| Redis | 6379 | Cache |
+### Acceder al panel
 
-## Obtener Token del Admin
+Abre `http://localhost/panel/` e ingresa con las credenciales del admin configuradas en `.env`.
 
-En la primera ejecución, el token del admin se genera automáticamente y se muestra en los logs de PostgreSQL:
+---
+
+## Panel de Gestion
+
+El panel web permite gestionar todo el sistema desde el navegador. Accesible en `/panel/`.
+
+### Para usuarios
+
+| Seccion | Descripcion |
+|---------|-------------|
+| **Instancias** | Crear, conectar (QR) y eliminar instancias WhatsApp |
+| **Mensajes** | Enviar texto y multimedia a un destinatario |
+| **Envio Masivo** | Enviar a multiples numeros con progreso en tiempo real |
+| **Programados** | Agendar envios para fecha/hora futura |
+| **Plantillas** | Crear y gestionar mensajes reutilizables |
+| **Contactos** | Organizar numeros en listas reutilizables |
+| **Historial** | Ver log de todos los envios con filtros |
+| **Sesiones** | Ver y revocar sesiones activas |
+| **API Docs** | Documentacion interactiva de la API |
+
+### Para administradores (adicional)
+
+| Seccion | Descripcion |
+|---------|-------------|
+| **Dashboard** | Metricas: usuarios, instancias, uptime, actividad reciente |
+| **Admin** | CRUD de usuarios con roles y limites |
+| **Auditoria** | Log de acciones administrativas con filtros |
+| **Backups** | Crear y listar backups de la base de datos |
+| **Status** | Gestion de incidentes, mantenimientos y salud de servicios |
+
+---
+
+## API REST
+
+Todos los endpoints requieren autenticacion via header:
+
+```
+apikey: <tu_token>
+```
+
+### Instancias
 
 ```bash
-docker compose logs taguato-postgres | grep "API Token"
-# Output: NOTICE:  API Token: <tu-token-admin>
-```
-
-Guarda este token, es tu clave de acceso como administrador.
-
-## Gestión de Usuarios (Admin)
-
-### Crear usuario
-
-```bash
-curl -X POST http://localhost/admin/users \
-  -H "apikey: TOKEN_ADMIN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "empresa1",
-    "password": "password_seguro",
-    "max_instances": 3
-  }'
-```
-
-Respuesta:
-```json
-{
-  "user": {
-    "id": 2,
-    "username": "empresa1",
-    "role": "user",
-    "api_token": "abc123...",
-    "max_instances": 3,
-    "is_active": true
-  }
-}
-```
-
-### Listar usuarios
-
-```bash
-curl http://localhost/admin/users \
-  -H "apikey: TOKEN_ADMIN"
-```
-
-### Ver usuario con sus instancias
-
-```bash
-curl http://localhost/admin/users/2 \
-  -H "apikey: TOKEN_ADMIN"
-```
-
-### Actualizar usuario
-
-```bash
-curl -X PUT http://localhost/admin/users/2 \
-  -H "apikey: TOKEN_ADMIN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "max_instances": 5,
-    "is_active": true
-  }'
-```
-
-Campos actualizables: `max_instances`, `is_active`, `role`, `password`, `regenerate_token` (boolean).
-
-### Eliminar usuario
-
-```bash
-curl -X DELETE http://localhost/admin/users/2 \
-  -H "apikey: TOKEN_ADMIN"
-```
-
-## API REST (Usuarios)
-
-Cada usuario usa su propio token (obtenido al crear el usuario):
-
-```
-apikey: TOKEN_DEL_USUARIO
-```
-
-### Crear instancia WhatsApp
-
-```bash
+# Crear instancia
 curl -X POST http://localhost/instance/create \
-  -H "apikey: TOKEN_USUARIO" \
+  -H "apikey: TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "instanceName": "mi-whatsapp",
-    "integration": "WHATSAPP-BAILEYS",
-    "qrcode": true
-  }'
+  -d '{"instanceName": "mi-whatsapp", "integration": "WHATSAPP-BAILEYS"}'
+
+# Conectar (obtener QR)
+curl http://localhost/instance/connect/mi-whatsapp -H "apikey: TOKEN"
+
+# Listar instancias
+curl http://localhost/instance/fetchInstances -H "apikey: TOKEN"
 ```
 
-> El usuario solo puede crear hasta `max_instances` instancias.
-
-### Obtener QR para vincular
+### Mensajes
 
 ```bash
-curl http://localhost/instance/connect/mi-whatsapp \
-  -H "apikey: TOKEN_USUARIO"
-```
-
-### Ver estado de conexión
-
-```bash
-curl http://localhost/instance/connectionState/mi-whatsapp \
-  -H "apikey: TOKEN_USUARIO"
-```
-
-### Listar mis instancias
-
-```bash
-curl http://localhost/instance/fetchInstances \
-  -H "apikey: TOKEN_USUARIO"
-```
-
-> Solo devuelve las instancias que pertenecen al usuario.
-
-### Enviar mensaje de texto
-
-```bash
+# Texto
 curl -X POST http://localhost/message/sendText/mi-whatsapp \
-  -H "apikey: TOKEN_USUARIO" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "number": "595981123456",
-    "text": "Hola desde TAGUATO-SEND!"
-  }'
-```
+  -H "apikey: TOKEN" -H "Content-Type: application/json" \
+  -d '{"number": "595981123456", "text": "Hola desde TAGUATO-SEND!"}'
 
-> **Nota:** El número debe incluir código de país sin `+`. Paraguay: `595`, Argentina: `54`, Brasil: `55`.
-
-### Enviar imagen
-
-```bash
+# Media (imagen, documento, audio, video)
 curl -X POST http://localhost/message/sendMedia/mi-whatsapp \
-  -H "apikey: TOKEN_USUARIO" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "number": "595981123456",
-    "mediatype": "image",
-    "media": "https://ejemplo.com/imagen.jpg",
-    "caption": "Mira esta imagen"
-  }'
+  -H "apikey: TOKEN" -H "Content-Type: application/json" \
+  -d '{"number": "595981123456", "mediatype": "image", "media": "https://ejemplo.com/img.jpg"}'
 ```
 
-### Enviar documento
+### Envios programados
 
 ```bash
-curl -X POST http://localhost/message/sendMedia/mi-whatsapp \
-  -H "apikey: TOKEN_USUARIO" \
-  -H "Content-Type: application/json" \
+# Crear envio programado
+curl -X POST http://localhost/api/scheduled \
+  -H "apikey: TOKEN" -H "Content-Type: application/json" \
   -d '{
-    "number": "595981123456",
-    "mediatype": "document",
-    "media": "https://ejemplo.com/archivo.pdf",
-    "fileName": "reporte.pdf"
+    "instance_name": "mi-whatsapp",
+    "message_type": "text",
+    "message_content": "Mensaje automatico",
+    "recipients": ["595981123456", "595982654321"],
+    "scheduled_at": "2026-03-01T10:00:00"
   }'
+
+# Listar programados
+curl http://localhost/api/scheduled -H "apikey: TOKEN"
+
+# Cancelar
+curl -X DELETE http://localhost/api/scheduled/1 -H "apikey: TOKEN"
 ```
 
-### Configurar webhook
+### Administracion (requiere role=admin)
 
 ```bash
-curl -X POST http://localhost/webhook/set/mi-whatsapp \
-  -H "apikey: TOKEN_USUARIO" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "url": "https://tu-servidor.com/webhook",
-    "webhook_by_events": false,
-    "webhook_base64": false,
-    "events": [
-      "MESSAGES_UPSERT",
-      "CONNECTION_UPDATE",
-      "QRCODE_UPDATED"
-    ]
-  }'
+# Crear usuario
+curl -X POST http://localhost/admin/users \
+  -H "apikey: ADMIN_TOKEN" -H "Content-Type: application/json" \
+  -d '{"username": "empresa1", "password": "secreto123", "max_instances": 3}'
+
+# Listar usuarios
+curl http://localhost/admin/users -H "apikey: ADMIN_TOKEN"
 ```
 
-### Eliminar instancia
+> Consulta la documentacion completa en el panel: **API Docs**
 
-```bash
-curl -X DELETE http://localhost/instance/delete/mi-whatsapp \
-  -H "apikey: TOKEN_USUARIO"
-```
-
-## Endpoints del Gateway
-
-### Admin (requiere role=admin)
-
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| POST | `/admin/users` | Crear usuario |
-| GET | `/admin/users` | Listar usuarios |
-| GET | `/admin/users/{id}` | Ver usuario + instancias |
-| PUT | `/admin/users/{id}` | Actualizar usuario |
-| DELETE | `/admin/users/{id}` | Eliminar usuario |
-
-### Health check (sin auth)
-
-| Método | Endpoint | Descripción |
-|--------|----------|-------------|
-| GET | `/health` | Estado del gateway |
-
-### Proxied (filtrado por usuario)
-
-Todos los endpoints de Evolution API pasan por el gateway:
-- **Admin**: acceso total sin restricción
-- **Usuario**: solo opera sobre sus propias instancias
-- Crear instancia verifica limite de `max_instances`
-- `fetchInstances` filtra la respuesta para mostrar solo las del usuario
+---
 
 ## Control de Acceso
 
-| Acción | Admin | Usuario |
-|--------|-------|---------|
-| Crear instancia | Sin limite | Hasta max_instances |
+| Accion | Admin | Usuario |
+|--------|:-----:|:-------:|
+| Crear instancias | Sin limite | Hasta `max_instances` |
 | Ver instancias | Todas | Solo las propias |
-| Operar instancia | Cualquiera | Solo las propias |
-| Manager web | Acceso total | Bloqueado |
-| Swagger docs | Acceso total | Bloqueado |
-| Gestionar usuarios | CRUD completo | Sin acceso |
+| Enviar mensajes | Cualquier instancia | Solo sus instancias |
+| Programar envios | Cualquier instancia | Solo sus instancias |
+| Manager Evolution API | Si | No |
+| Swagger docs | Si | No |
+| Gestionar usuarios | Si | No |
+| Dashboard | Si | No |
+| Auditoria | Si | No |
+| Backups | Si | No |
+| Status / Incidentes | Si | No |
 
-## Scripts de Utilidad
+---
 
-```bash
-./scripts/start.sh             # Iniciar todos los servicios
-./scripts/stop.sh              # Detener todos los servicios
-./scripts/logs.sh              # Ver logs de todos los servicios
-./scripts/logs.sh taguato-api  # Ver logs solo de la API
-./scripts/backup-db.sh         # Crear backup de la base de datos
-```
+## Tech Stack
+
+| Componente | Tecnologia | Proposito |
+|------------|------------|-----------|
+| Gateway | **OpenResty** (nginx + LuaJIT) | Proxy reverso, auth, rate limiting, panel, workers |
+| WhatsApp | **Evolution API** v2.3.7 | Motor de WhatsApp via Baileys |
+| Base de datos | **PostgreSQL** 15 + pgcrypto | Usuarios, instancias, logs, templates, contactos |
+| Cache | **Redis** | Cache de sesiones WhatsApp |
+| DB Driver | **pgmoon** | Conexion PostgreSQL desde Lua (async) |
+| HTTP Client | **lua-resty-http** | Requests internos desde workers |
+| Contenedores | **Docker Compose** | Orquestacion de los 4 servicios |
+
+---
 
 ## Estructura del Proyecto
 
 ```
 TAGUATO-SEND/
-├── docker-compose.yml         # Orquestación de servicios
-├── .env                       # Variables de entorno (no se commitea)
-├── .env.example               # Template de variables
-├── .gitignore                 # Exclusiones de Git
-├── README.md                  # Esta documentación
+├── docker-compose.yml            # Orquestacion de servicios
+├── .env.example                  # Template de variables de entorno
 ├── db/
-│   ├── init.sql               # Schema de tablas multi-tenant
-│   └── seed-admin.sh          # Seed del usuario admin
+│   ├── init.sql                  # Schema completo (12 tablas)
+│   └── seed-admin.sh             # Seed del usuario admin
 ├── gateway/
-│   ├── Dockerfile             # OpenResty + pgmoon
-│   ├── nginx.conf             # Configuración del gateway
-│   └── lua/
-│       ├── access.lua         # Auth + filtro combinado
-│       ├── admin.lua          # CRUD de usuarios
-│       ├── auth.lua           # Middleware de autenticación
-│       ├── init.lua           # Pool de conexiones PG
-│       ├── instance_filter.lua # Filtro de instancias (ref)
-│       ├── json.lua           # Helpers JSON
-│       └── response_filter.lua # Filtro de respuestas
-└── scripts/
-    ├── start.sh               # Iniciar servicios
-    ├── stop.sh                # Detener servicios
-    ├── logs.sh                # Ver logs
-    └── backup-db.sh           # Backup de DB
+│   ├── Dockerfile                # OpenResty alpine + pgmoon
+│   ├── nginx.conf                # Rutas, proxy, workers
+│   ├── lua/
+│   │   ├── init.lua              # Pool de conexiones PostgreSQL
+│   │   ├── json.lua              # Helpers JSON
+│   │   ├── auth.lua              # Middleware de autenticacion
+│   │   ├── access.lua            # Auth + filtro de instancias
+│   │   ├── admin.lua             # CRUD de usuarios
+│   │   ├── templates.lua         # CRUD de plantillas
+│   │   ├── contacts.lua          # CRUD de listas de contactos
+│   │   ├── scheduled.lua         # CRUD de envios programados
+│   │   ├── sessions.lua          # Gestion de sesiones
+│   │   ├── message_log.lua       # Registro de mensajes
+│   │   ├── audit.lua             # Log de auditoria
+│   │   ├── scheduled_worker.lua  # Worker de envios programados
+│   │   ├── reconnect_worker.lua  # Worker de auto-reconexion
+│   │   ├── uptime_worker.lua     # Worker de monitoreo
+│   │   └── ...
+│   └── panel/
+│       ├── index.html            # SPA del panel
+│       ├── css/style.css         # Estilos + dark mode
+│       ├── js/
+│       │   ├── api.js            # Cliente API
+│       │   ├── app.js            # Logica de la aplicacion
+│       │   └── docs-data.js      # Datos de documentacion
+│       ├── img/                  # Logo y assets
+│       └── status/               # Pagina publica de estado
+├── scripts/
+│   ├── start.sh                  # Iniciar servicios
+│   ├── stop.sh                   # Detener servicios
+│   ├── logs.sh                   # Ver logs
+│   └── backup-db.sh              # Backup de DB
+└── docs/
+    └── changes/                  # Historial de cambios por feature
 ```
+
+---
+
+## Scripts de Utilidad
+
+```bash
+./scripts/start.sh                    # Iniciar todos los servicios
+./scripts/stop.sh                     # Detener todos los servicios
+./scripts/logs.sh                     # Ver logs de todos los servicios
+./scripts/logs.sh taguato-gateway     # Ver logs solo del gateway
+./scripts/backup-db.sh               # Crear backup de PostgreSQL
+```
+
+---
+
+## Workers en Background
+
+TAGUATO-SEND ejecuta 3 workers automaticos en el gateway:
+
+| Worker | Intervalo | Funcion |
+|--------|-----------|---------|
+| **Uptime Check** | 5 min | Monitorea salud de los 4 servicios |
+| **Auto-Reconnect** | 3 min | Detecta y reconecta instancias desconectadas |
+| **Scheduled Messages** | 1 min | Ejecuta envios programados pendientes |
+
+---
+
+## Documentacion
+
+| Recurso | Ubicacion |
+|---------|-----------|
+| Panel de gestion | `http://localhost/panel/` |
+| API Docs (interactivo) | Panel > API Docs |
+| Pagina de estado | `http://localhost/status/` |
+| Swagger (admin) | `http://localhost/docs` |
+| Historial de cambios | [`docs/changes/`](docs/changes/) |
+
+---
+
+## Configuracion
+
+Las variables de entorno se configuran en `.env` (ver [`.env.example`](.env.example)):
+
+| Variable | Descripcion |
+|----------|-------------|
+| `GATEWAY_PORT` | Puerto del gateway (default: 80) |
+| `ADMIN_USERNAME` | Usuario admin inicial |
+| `ADMIN_PASSWORD` | Contrasena admin inicial |
+| `AUTHENTICATION_API_KEY` | Clave interna gateway-API |
+| `POSTGRES_PASSWORD` | Contrasena de PostgreSQL |
+
+---
+
+<p align="center">
+  Hecho en Paraguay
+</p>

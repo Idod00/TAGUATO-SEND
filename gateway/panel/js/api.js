@@ -201,6 +201,28 @@ const API = (() => {
     return await request('GET', '/admin/dashboard');
   }
 
+  // Scheduled messages
+  async function listScheduled(params) {
+    const qs = new URLSearchParams(params).toString();
+    return await request('GET', '/api/scheduled' + (qs ? '?' + qs : ''));
+  }
+
+  async function createScheduled(data) {
+    return await request('POST', '/api/scheduled', data);
+  }
+
+  async function getScheduled(id) {
+    return await request('GET', '/api/scheduled/' + id);
+  }
+
+  async function updateScheduled(id, fields) {
+    return await request('PUT', '/api/scheduled/' + id, fields);
+  }
+
+  async function cancelScheduled(id) {
+    return await request('DELETE', '/api/scheduled/' + id);
+  }
+
   // Bulk messaging
   let bulkCancelled = false;
 
@@ -327,6 +349,7 @@ const API = (() => {
     login, logout, getProfile, changePassword,
     fetchInstances, createInstance, deleteInstance, connectInstance, getInstanceStatus,
     sendText, sendMedia, sendBulkText, cancelBulk,
+    listScheduled, createScheduled, getScheduled, updateScheduled, cancelScheduled,
     logMessage, getMessageLogs,
     listTemplates, createTemplate, updateTemplate, deleteTemplate,
     listContactLists, getContactList, createContactList, updateContactList, deleteContactList,

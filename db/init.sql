@@ -233,3 +233,24 @@ CREATE TABLE IF NOT EXISTS taguato.reconnect_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_reconnect_log_created ON taguato.reconnect_log(created_at DESC);
+
+-- ============================================
+-- Scheduled messages
+-- ============================================
+CREATE TABLE IF NOT EXISTS taguato.scheduled_messages (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES taguato.users(id) ON DELETE CASCADE,
+    instance_name VARCHAR(255) NOT NULL,
+    message_type VARCHAR(20) DEFAULT 'text' CHECK (message_type IN ('text', 'image', 'document', 'audio', 'video')),
+    message_content TEXT NOT NULL,
+    recipients TEXT NOT NULL,
+    scheduled_at TIMESTAMP NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')),
+    results JSONB,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_scheduled_user ON taguato.scheduled_messages(user_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_pending ON taguato.scheduled_messages(status, scheduled_at)
+    WHERE status = 'pending';
