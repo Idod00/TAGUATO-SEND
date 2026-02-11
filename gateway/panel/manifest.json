@@ -1,0 +1,21 @@
+{
+  "name": "TAGUATO-SEND",
+  "short_name": "TAGUATO",
+  "description": "Panel de gestion WhatsApp",
+  "start_url": "/panel/",
+  "display": "standalone",
+  "background_color": "#faf5f5",
+  "theme_color": "#8B1A1A",
+  "icons": [
+    {
+      "src": "/panel/img/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/panel/img/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

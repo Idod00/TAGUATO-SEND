@@ -1,6 +1,8 @@
 -- Auto-reconnect worker
 -- Runs on a timer, checks all instances, reconnects disconnected ones
 
+local log = require "log"
+
 local _M = {}
 
 function _M.check()
@@ -9,7 +11,7 @@ function _M.check()
 
     local api_key = os.getenv("AUTHENTICATION_API_KEY")
     if not api_key then
-        ngx.log(ngx.ERR, "reconnect_worker: AUTHENTICATION_API_KEY not set")
+        log.err("reconnect_worker", "AUTHENTICATION_API_KEY not set")
         return
     end
 
@@ -23,13 +25,13 @@ function _M.check()
     })
 
     if not res or res.status ~= 200 then
-        ngx.log(ngx.ERR, "reconnect_worker: failed to fetch instances: ", err or (res and res.status))
+        log.err("reconnect_worker", "failed to fetch instances", { error = err or (res and res.status) })
         return
     end
 
     local ok, instances = pcall(cjson.decode, res.body)
     if not ok or type(instances) ~= "table" then
-        ngx.log(ngx.ERR, "reconnect_worker: invalid instances response")
+        log.err("reconnect_worker", "invalid instances response")
         return
     end
 
@@ -41,7 +43,7 @@ function _M.check()
         local state = inst.instance and inst.instance.state
 
         if name and state and state ~= "open" then
-            ngx.log(ngx.INFO, "reconnect_worker: attempting reconnect for ", name, " (state: ", state, ")")
+            log.info("reconnect_worker", "attempting reconnect", { instance = name, state = state })
 
             local reconn_res, reconn_err = httpc:request_uri(
                 "http://taguato-api:8080/instance/connect/" .. name,
@@ -56,11 +58,11 @@ function _M.check()
 
             if reconn_res and reconn_res.status == 200 then
                 result = "reconnected"
-                ngx.log(ngx.INFO, "reconnect_worker: reconnected ", name)
+                log.info("reconnect_worker", "reconnected", { instance = name })
             else
                 result = "failed"
                 error_msg = reconn_err or (reconn_res and "status " .. reconn_res.status) or "unknown error"
-                ngx.log(ngx.WARN, "reconnect_worker: failed to reconnect ", name, ": ", error_msg)
+                log.warn("reconnect_worker", "failed to reconnect", { instance = name, error = error_msg })
             end
 
             -- Log to reconnect_log

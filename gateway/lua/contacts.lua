@@ -4,6 +4,7 @@
 local db = require "init"
 local json = require "json"
 local cjson = require "cjson"
+local validate = require "validate"
 
 local empty_array_mt = cjson.empty_array_mt
 local function as_array(t)
@@ -153,6 +154,11 @@ if method == "POST" and items_list_id then
     local added = {}
     for _, item in ipairs(items) do
         if item.phone_number and item.phone_number ~= "" then
+            local phone_ok, phone_err = validate.validate_phone(item.phone_number)
+            if not phone_ok then
+                json.respond(400, { error = phone_err .. " (" .. tostring(item.phone_number) .. ")" })
+                return
+            end
             local res = db.query(
                 "INSERT INTO taguato.contact_list_items (list_id, phone_number, label) VALUES ($1, $2, $3) RETURNING id, phone_number, label, created_at",
                 items_list_id, item.phone_number, item.label or ""

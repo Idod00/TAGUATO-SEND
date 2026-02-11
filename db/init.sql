@@ -167,6 +167,12 @@ CREATE INDEX IF NOT EXISTS idx_contact_items_list ON taguato.contact_list_items(
 ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS rate_limit INT DEFAULT NULL;
 
 -- ============================================
+-- Brute-force protection columns
+-- ============================================
+ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0;
+ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP;
+
+-- ============================================
 -- User sessions
 -- ============================================
 CREATE TABLE IF NOT EXISTS taguato.sessions (
@@ -254,3 +260,29 @@ CREATE TABLE IF NOT EXISTS taguato.scheduled_messages (
 CREATE INDEX IF NOT EXISTS idx_scheduled_user ON taguato.scheduled_messages(user_id);
 CREATE INDEX IF NOT EXISTS idx_scheduled_pending ON taguato.scheduled_messages(status, scheduled_at)
     WHERE status = 'pending';
+
+-- ============================================
+-- Schema migrations tracking
+-- ============================================
+CREATE TABLE IF NOT EXISTS taguato.schema_migrations (
+    version INT PRIMARY KEY,
+    filename VARCHAR(255) NOT NULL,
+    applied_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ============================================
+-- User webhooks
+-- ============================================
+CREATE TABLE IF NOT EXISTS taguato.user_webhooks (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES taguato.users(id) ON DELETE CASCADE,
+    instance_name VARCHAR(255) NOT NULL,
+    webhook_url TEXT NOT NULL,
+    events TEXT[] DEFAULT '{}',
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, instance_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhooks_user ON taguato.user_webhooks(user_id);

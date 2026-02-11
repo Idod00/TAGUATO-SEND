@@ -2,7 +2,7 @@ FROM openresty/openresty:alpine-fat
 
 RUN luarocks install pgmoon && \
     luarocks install lua-resty-http && \
-    apk add --no-cache postgresql-client
+    apk add --no-cache postgresql-client curl
 
 COPY nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
 COPY lua/ /usr/local/openresty/nginx/lua/

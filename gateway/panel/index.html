@@ -5,7 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TAGUATO-SEND</title>
   <link rel="icon" href="/favicon.ico" type="image/x-icon">
-  <link rel="stylesheet" href="/panel/css/style.css?v=1.7">
+  <link rel="manifest" href="/panel/manifest.json">
+  <meta name="theme-color" content="#8B1A1A">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TAGUATO-SEND">
+  <link rel="apple-touch-icon" href="/panel/img/logo.png">
+  <link rel="stylesheet" href="/panel/css/style.css?v=1.8">
 </head>
 <body>
 
@@ -42,11 +48,11 @@
         </div>
         <div class="form-group">
           <label for="cp-new">Nueva contrasena</label>
-          <input type="password" id="cp-new" class="form-control" autocomplete="new-password" required minlength="6">
+          <input type="password" id="cp-new" class="form-control" autocomplete="new-password" required minlength="8">
         </div>
         <div class="form-group">
           <label for="cp-confirm">Confirmar nueva contrasena</label>
-          <input type="password" id="cp-confirm" class="form-control" autocomplete="new-password" required minlength="6">
+          <input type="password" id="cp-confirm" class="form-control" autocomplete="new-password" required minlength="8">
         </div>
         <button type="submit" id="cp-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Cambiar Contrasena</button>
       </form>
@@ -64,12 +70,14 @@
       </div>
       <nav>
         <a href="#" class="nav-link hidden" id="nav-dashboard" data-section="dashboard">Dashboard</a>
+        <a href="#" class="nav-link hidden" id="nav-user-dashboard" data-section="user-dashboard">Mi Dashboard</a>
         <a href="#" class="nav-link active" data-section="instances">Instancias</a>
         <a href="#" class="nav-link" data-section="messages">Mensajes</a>
         <a href="#" class="nav-link" data-section="templates">Plantillas</a>
         <a href="#" class="nav-link" data-section="contacts">Contactos</a>
         <a href="#" class="nav-link" data-section="history">Historial</a>
         <a href="#" class="nav-link" data-section="scheduled">Programados</a>
+        <a href="#" class="nav-link" data-section="webhooks">Webhooks</a>
         <a href="#" class="nav-link" data-section="sessions">Sesiones</a>
         <a href="#" class="nav-link" data-section="docs">API Docs</a>
         <a href="#" class="nav-link hidden" id="nav-status" data-section="status">Status</a>
@@ -92,6 +100,14 @@
         <div id="dashboard-cards" class="dashboard-grid"></div>
         <h3 style="font-size:1rem;margin-bottom:0.75rem;color:var(--text-light);font-weight:600;">Actividad Reciente</h3>
         <div id="dashboard-activity" class="recent-activity-list"></div>
+      </div>
+
+      <!-- User Dashboard Section (all users) -->
+      <div id="section-user-dashboard" class="section hidden">
+        <h2>Mi Dashboard</h2>
+        <div id="user-dashboard-cards" class="dashboard-grid"></div>
+        <h3 style="font-size:1rem;margin:1.5rem 0 0.75rem;color:var(--text-light);font-weight:600;">Mensajes por Dia (7 dias)</h3>
+        <div id="user-dashboard-chart" class="user-chart-container"></div>
       </div>
 
       <!-- Instances Section -->
@@ -287,8 +303,9 @@
             <label for="hist-to">Hasta</label>
             <input type="date" id="hist-to" class="form-control">
           </div>
-          <div class="form-group full-width" style="margin-bottom:0;">
+          <div class="form-group full-width" style="margin-bottom:0;display:flex;gap:0.5rem;">
             <button type="button" id="hist-filter-btn" class="btn btn-primary btn-sm">Filtrar</button>
+            <button type="button" id="hist-export-btn" class="btn btn-secondary btn-sm">Exportar CSV</button>
           </div>
         </div>
         <div id="history-list"></div>
@@ -381,6 +398,36 @@
 
         <div id="scheduled-list"></div>
         <div id="scheduled-pagination" style="margin-top:0.75rem;display:flex;gap:0.5rem;justify-content:center;"></div>
+      </div>
+
+      <!-- Webhooks Section -->
+      <div id="section-webhooks" class="section hidden">
+        <h2>Webhooks</h2>
+        <form id="create-webhook-form" class="admin-create-form" style="grid-template-columns:1fr 1fr 1fr;">
+          <div class="form-group">
+            <label for="wh-instance">Instancia</label>
+            <select id="wh-instance" class="form-control" required>
+              <option value="">Seleccionar instancia...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="wh-url">URL del Webhook</label>
+            <input type="url" id="wh-url" class="form-control" placeholder="https://tu-server.com/webhook" required>
+          </div>
+          <div class="form-group">
+            <label>Eventos</label>
+            <div class="services-checkboxes" id="wh-events-checkboxes">
+              <label><input type="checkbox" name="wh-event" value="MESSAGES_UPSERT"> Mensajes</label>
+              <label><input type="checkbox" name="wh-event" value="CONNECTION_UPDATE"> Conexion</label>
+              <label><input type="checkbox" name="wh-event" value="QRCODE_UPDATED"> QR Code</label>
+              <label><input type="checkbox" name="wh-event" value="MESSAGES_UPDATE"> Msg Update</label>
+            </div>
+          </div>
+          <div class="form-group full-width">
+            <button type="submit" class="btn btn-primary">Crear Webhook</button>
+          </div>
+        </form>
+        <div id="webhooks-list"></div>
       </div>
 
       <!-- Sessions Section -->
@@ -718,8 +765,13 @@
     <div id="emoji-picker-grid" class="emoji-picker-grid"></div>
   </div>
 
-  <script src="/panel/js/api.js?v=1.7"></script>
-  <script src="/panel/js/docs-data.js?v=1.7"></script>
-  <script src="/panel/js/app.js?v=1.7"></script>
+  <script src="/panel/js/api.js?v=1.8"></script>
+  <script src="/panel/js/docs-data.js?v=1.8"></script>
+  <script src="/panel/js/app.js?v=1.8"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/panel/sw.js').catch(() => {});
+    }
+  </script>
 </body>
 </html>

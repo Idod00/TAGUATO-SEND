@@ -80,12 +80,14 @@ const App = (() => {
       loadDashboard();
       dashboardTimer = setInterval(loadDashboard, 30000);
     }
+    if (section === 'user-dashboard') loadUserDashboard();
     if (section === 'instances') loadInstances();
     if (section === 'messages') loadMessageSection();
     if (section === 'templates') loadTemplates();
     if (section === 'contacts') loadContactLists();
     if (section === 'history') { historyPage = 1; loadHistory(); }
     if (section === 'scheduled') { scheduledPage = 1; loadScheduledSection(); }
+    if (section === 'webhooks') loadWebhooksSection();
     if (section === 'sessions') loadSessions();
     if (section === 'docs') renderDocs();
     if (section === 'admin') loadUsers();
@@ -154,8 +156,8 @@ const App = (() => {
       return;
     }
 
-    if (newPass.length < 6) {
-      showToast('La nueva contrasena debe tener al menos 6 caracteres', 'error');
+    if (newPass.length < 8) {
+      showToast('La contrasena debe tener min 8 caracteres, 1 mayuscula, 1 minuscula y 1 numero', 'error');
       return;
     }
 
@@ -187,20 +189,23 @@ const App = (() => {
     const dashboardNav = $('#nav-dashboard');
     const auditNav = $('#nav-audit');
     const backupNav = $('#nav-backup');
+    const userDashNav = $('#nav-user-dashboard');
     if (currentUser.role === 'admin') {
       show(adminNav);
       show(statusNav);
       show(dashboardNav);
       show(auditNav);
       show(backupNav);
+      hide(userDashNav);
     } else {
       hide(adminNav);
       hide(statusNav);
       hide(dashboardNav);
       hide(auditNav);
       hide(backupNav);
+      show(userDashNav);
     }
-    navigate(currentUser.role === 'admin' ? 'dashboard' : 'instances');
+    navigate(currentUser.role === 'admin' ? 'dashboard' : 'user-dashboard');
   }
 
   // --- Instances ---
@@ -1138,6 +1143,101 @@ const App = (() => {
     }
   }
 
+  // --- Webhooks ---
+  function loadWebhooksSection() {
+    // Populate instance select
+    const sel = $('#wh-instance');
+    if (sel) {
+      sel.innerHTML = '<option value="">Seleccionar instancia...</option>';
+      instances.forEach(inst => {
+        const name = inst.instance?.instanceName || inst.name || inst.instanceName || '';
+        if (name) {
+          sel.innerHTML += `<option value="${esc(name)}">${esc(name)}</option>`;
+        }
+      });
+    }
+    loadWebhooks();
+  }
+
+  async function loadWebhooks() {
+    const list = $('#webhooks-list');
+    list.innerHTML = '<div class="loading">Cargando webhooks...</div>';
+    try {
+      const data = await API.listWebhooks();
+      const webhooks = data.webhooks || [];
+      if (webhooks.length === 0) {
+        list.innerHTML = '<div class="empty">No hay webhooks configurados</div>';
+        return;
+      }
+      list.innerHTML = `
+        <table class="table">
+          <thead>
+            <tr><th>Instancia</th><th>URL</th><th>Eventos</th><th>Acciones</th></tr>
+          </thead>
+          <tbody>
+            ${webhooks.map(w => {
+              const events = Array.isArray(w.events) ? w.events : [];
+              return `
+                <tr>
+                  <td>${esc(w.instance_name)}</td>
+                  <td style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(w.webhook_url)}</td>
+                  <td>${events.length > 0 ? events.map(e => `<span class="badge badge-user">${esc(e)}</span>`).join(' ') : 'Todos'}</td>
+                  <td><button class="btn btn-sm btn-danger" onclick="App.confirmDeleteWebhook(${w.id})">Eliminar</button></td>
+                </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+    } catch (err) {
+      list.innerHTML = '<div class="empty">Error al cargar webhooks</div>';
+    }
+  }
+
+  async function handleCreateWebhook(e) {
+    e.preventDefault();
+    const instanceName = $('#wh-instance').value;
+    const url = $('#wh-url').value.trim();
+    const events = Array.from($$('input[name="wh-event"]:checked')).map(cb => cb.value);
+    if (!instanceName || !url) {
+      showToast('Instancia y URL son requeridos', 'error');
+      return;
+    }
+    try {
+      await API.createWebhook(instanceName, url, events);
+      showToast('Webhook creado');
+      $('#wh-url').value = '';
+      $$('input[name="wh-event"]:checked').forEach(cb => { cb.checked = false; });
+      loadWebhooks();
+    } catch (err) {
+      showToast(err.message || 'Error al crear webhook', 'error');
+    }
+  }
+
+  function confirmDeleteWebhook(id) {
+    if (!confirm('Eliminar este webhook?')) return;
+    API.deleteWebhook(id)
+      .then(() => { showToast('Webhook eliminado'); loadWebhooks(); })
+      .catch(err => showToast(err.message || 'Error al eliminar', 'error'));
+  }
+
+  // --- Export CSV ---
+  async function handleExportCSV() {
+    const params = {};
+    const status = $('#hist-status').value;
+    const type = $('#hist-type').value;
+    const from = $('#hist-from').value;
+    const to = $('#hist-to').value;
+    if (status) params.status = status;
+    if (type) params.message_type = type;
+    if (from) params.date_from = from + 'T00:00:00';
+    if (to) params.date_to = to + 'T23:59:59';
+    try {
+      await API.exportHistoryCSV(params);
+      showToast('Exportacion iniciada');
+    } catch (err) {
+      showToast(err.message || 'Error al exportar', 'error');
+    }
+  }
+
   // --- Sessions ---
   async function loadSessions() {
     const list = $('#sessions-list');
@@ -1194,6 +1294,69 @@ const App = (() => {
       loadSessions();
     } catch (err) {
       showToast(err.message || 'Error al revocar sesion', 'error');
+    }
+  }
+
+  // --- User Dashboard ---
+  async function loadUserDashboard() {
+    const cardsContainer = $('#user-dashboard-cards');
+    const chartContainer = $('#user-dashboard-chart');
+    cardsContainer.innerHTML = '<div class="loading">Cargando...</div>';
+    chartContainer.innerHTML = '';
+
+    try {
+      const data = await API.getUserDashboard();
+
+      cardsContainer.innerHTML = `
+        <div class="dashboard-card">
+          <div class="dash-value">${data.messages_today}</div>
+          <div class="dash-label">Hoy</div>
+          <div class="dash-sub">mensajes enviados</div>
+        </div>
+        <div class="dashboard-card">
+          <div class="dash-value">${data.messages_week}</div>
+          <div class="dash-label">Esta Semana</div>
+          <div class="dash-sub">ultimos 7 dias</div>
+        </div>
+        <div class="dashboard-card">
+          <div class="dash-value">${data.messages_month}</div>
+          <div class="dash-label">Este Mes</div>
+          <div class="dash-sub">ultimos 30 dias</div>
+        </div>
+        <div class="dashboard-card dash-green">
+          <div class="dash-value">${data.delivery_rate}%</div>
+          <div class="dash-label">Tasa de Entrega</div>
+          <div class="dash-sub">${data.messages_total} total</div>
+        </div>
+        <div class="dashboard-card">
+          <div class="dash-value">${data.instances}</div>
+          <div class="dash-label">Instancias</div>
+          <div class="dash-sub">de ${data.max_instances} max</div>
+        </div>`;
+
+      // Render daily chart (bar chart)
+      const daily = data.daily || [];
+      if (daily.length === 0) {
+        chartContainer.innerHTML = '<div class="empty">Sin datos de los ultimos 7 dias</div>';
+        return;
+      }
+      const maxCount = Math.max(...daily.map(d => parseInt(d.count) || 0), 1);
+      chartContainer.innerHTML = `
+        <div class="user-bar-chart">
+          ${daily.map(d => {
+            const count = parseInt(d.count) || 0;
+            const pct = Math.round((count / maxCount) * 100);
+            const day = d.day ? new Date(d.day).toLocaleDateString('es', { weekday: 'short', day: 'numeric' }) : '?';
+            return `
+              <div class="bar-col">
+                <div class="bar-value">${count}</div>
+                <div class="bar-fill" style="height:${pct}%"></div>
+                <div class="bar-label">${day}</div>
+              </div>`;
+          }).join('')}
+        </div>`;
+    } catch (err) {
+      cardsContainer.innerHTML = '<div class="empty">Error al cargar dashboard</div>';
     }
   }
 
@@ -2135,6 +2298,8 @@ const App = (() => {
     handleTemplateSelect('#msg-template', '#msg-text');
     handleTemplateSelect('#bulk-template', '#bulk-text');
     on('#hist-filter-btn', 'click', () => { historyPage = 1; loadHistory(); });
+    on('#hist-export-btn', 'click', handleExportCSV);
+    on('#create-webhook-form', 'submit', handleCreateWebhook);
     on('#create-scheduled-form', 'submit', handleCreateScheduled);
     on('#sched-filter-btn', 'click', () => { scheduledPage = 1; loadScheduled(); });
     on('#sched-load-contacts-btn', 'click', openSchedLoadContactsModal);
@@ -2217,6 +2382,7 @@ const App = (() => {
     viewScheduledDetail,
     cancelScheduledMessage,
     loadContactsIntoSchedNumbers,
+    confirmDeleteWebhook,
     revokeSessionAction,
     goAuditPage,
     showAuditDetail,

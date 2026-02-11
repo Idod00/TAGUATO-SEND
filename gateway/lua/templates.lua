@@ -3,6 +3,7 @@
 
 local db = require "init"
 local json = require "json"
+local validate = require "validate"
 
 local user = ngx.ctx.user
 if not user then
@@ -38,6 +39,16 @@ if method == "POST" and uri == "/api/templates" then
     end
     if not body.name or not body.content then
         json.respond(400, { error = "name and content are required" })
+        return
+    end
+    local name_ok, name_err = validate.validate_string(body.name, "name", 1, 100)
+    if not name_ok then
+        json.respond(400, { error = name_err })
+        return
+    end
+    local content_ok, content_err = validate.validate_string(body.content, "content", 1, 5000)
+    if not content_ok then
+        json.respond(400, { error = content_err })
         return
     end
     local res, err = db.query(

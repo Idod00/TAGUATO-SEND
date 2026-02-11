@@ -3,6 +3,7 @@
 -- Note: ngx.location.capture is NOT available in timer context, so we use cosocket
 
 local pgmoon = require "pgmoon"
+local log = require "log"
 
 local _M = {}
 
@@ -57,7 +58,7 @@ function _M.check()
         results[2] = { name = "Evolution API", status = "operational", response_time = api_time }
     else
         results[2] = { name = "Evolution API", status = "major_outage", response_time = api_time }
-        ngx.log(ngx.WARN, "uptime_worker: Evolution API health check failed: ", api_err or ("status=" .. tostring(api_status)))
+        log.warn("uptime_worker", "Evolution API health check failed", { error = api_err or ("status=" .. tostring(api_status)) })
     end
 
     -- 3. PostgreSQL - pgmoon connect + SELECT 1
@@ -72,7 +73,7 @@ function _M.check()
         end
         pg:keepalive(10000, 10)
     else
-        ngx.log(ngx.WARN, "uptime_worker: PostgreSQL connect failed: ", pg_err)
+        log.warn("uptime_worker", "PostgreSQL connect failed", { error = pg_err })
     end
     local pg_time = math.floor((ngx.now() - t0) * 1000)
     results[3] = { name = "PostgreSQL", status = pg_status, response_time = pg_time }
@@ -94,7 +95,7 @@ function _M.check()
         end
         red:set_keepalive(10000, 10)
     else
-        ngx.log(ngx.WARN, "uptime_worker: Redis connect failed: ", redis_err)
+        log.warn("uptime_worker", "Redis connect failed", { error = redis_err })
     end
     local redis_time = math.floor((ngx.now() - t0) * 1000)
     results[4] = { name = "Redis", status = redis_status, response_time = redis_time }
@@ -103,7 +104,7 @@ function _M.check()
     local pg2 = pgmoon.new(pg_config)
     local ok2, err2 = pg2:connect()
     if not ok2 then
-        ngx.log(ngx.ERR, "uptime_worker: cannot connect to DB for insert: ", err2)
+        log.err("uptime_worker", "cannot connect to DB for insert", { error = err2 })
         return
     end
 
@@ -114,7 +115,7 @@ function _M.check()
             .. tostring(r.response_time) .. ")"
         local res, qerr = pg2:query(sql)
         if not res then
-            ngx.log(ngx.ERR, "uptime_worker: insert failed: ", qerr)
+            log.err("uptime_worker", "insert failed", { error = qerr })
         end
     end
 
@@ -122,7 +123,7 @@ function _M.check()
     pg2:query("DELETE FROM taguato.uptime_checks WHERE checked_at < NOW() - INTERVAL '90 days'")
 
     pg2:keepalive(10000, 10)
-    ngx.log(ngx.INFO, "uptime_worker: check completed, 4 services recorded")
+    log.info("uptime_worker", "check completed, 4 services recorded")
 end
 
 return _M

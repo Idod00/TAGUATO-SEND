@@ -14,8 +14,14 @@ services:
       - PG_PASSWORD=${POSTGRES_PASSWORD:-taguato_secret}
       - REDIS_HOST=taguato-redis
       - REDIS_PORT=6379
+      - BACKUP_INTERVAL=${BACKUP_INTERVAL:-86400}
     volumes:
       - ./backups:/backups
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     depends_on:
       taguato-api:
         condition: service_started

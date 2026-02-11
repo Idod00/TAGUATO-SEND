@@ -1545,4 +1545,55 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .dashboard-grid { grid-template-columns: 1fr 1fr; }
 
   .emoji-picker { width: 260px; }
+  .user-bar-chart { min-height: 120px; }
+  .bar-col { min-width: 36px; }
+}
+
+/* User Dashboard Bar Chart */
+.user-chart-container {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+}
+
+.user-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 180px;
+  padding-top: 1rem;
+}
+
+.bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 40px;
+  max-width: 80px;
+}
+
+.bar-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.25rem;
+}
+
+.bar-fill {
+  width: 100%;
+  background: var(--primary);
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: height 0.3s ease;
+}
+
+.bar-label {
+  font-size: 0.7rem;
+  color: var(--text-light);
+  margin-top: 0.35rem;
+  text-align: center;
+  white-space: nowrap;
 }

@@ -196,6 +196,11 @@ const API = (() => {
     return await request('POST', '/admin/backup');
   }
 
+  // User Dashboard
+  async function getUserDashboard() {
+    return await request('GET', '/api/user/dashboard');
+  }
+
   // Dashboard
   async function getDashboard() {
     return await request('GET', '/admin/dashboard');
@@ -221,6 +226,42 @@ const API = (() => {
 
   async function cancelScheduled(id) {
     return await request('DELETE', '/api/scheduled/' + id);
+  }
+
+  // Webhooks
+  async function listWebhooks() {
+    return await request('GET', '/api/webhooks');
+  }
+
+  async function createWebhook(instanceName, webhookUrl, events) {
+    return await request('POST', '/api/webhooks', {
+      instance_name: instanceName,
+      webhook_url: webhookUrl,
+      events: events || [],
+    });
+  }
+
+  async function deleteWebhook(id) {
+    return await request('DELETE', '/api/webhooks/' + id);
+  }
+
+  // Export CSV
+  async function exportHistoryCSV(params) {
+    const qs = new URLSearchParams(params).toString();
+    const headers = {};
+    const token = getToken();
+    if (token) headers['apikey'] = token;
+    const res = await fetch('/api/messages/export' + (qs ? '?' + qs : ''), { headers });
+    if (!res.ok) throw { status: res.status, message: 'Export failed' };
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'message_history.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   // Bulk messaging
@@ -355,8 +396,10 @@ const API = (() => {
     listContactLists, getContactList, createContactList, updateContactList, deleteContactList,
     addContactItems, deleteContactItem,
     listSessions, revokeSession, listAllSessions, revokeAnySession,
+    listWebhooks, createWebhook, deleteWebhook,
+    exportHistoryCSV,
     getAuditLogs, listBackups, createBackup,
-    getDashboard,
+    getUserDashboard, getDashboard,
     listUsers, createUser, updateUser, deleteUser,
     getPublicStatus, listIncidents, listIncidentServices,
     createIncident, addIncidentUpdate, updateIncident, deleteIncident,

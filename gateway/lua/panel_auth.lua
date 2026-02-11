@@ -5,6 +5,7 @@
 
 local db = require "init"
 local json = require "json"
+local validate = require "validate"
 
 local method = ngx.req.get_method()
 local uri = ngx.var.uri
@@ -25,6 +26,26 @@ if method == "POST" and uri == "/api/auth/login" then
         return
     end
 
+    -- Check if account is locked (brute-force protection)
+    local lock_res = db.query(
+        [[SELECT id, failed_login_attempts, locked_until
+          FROM taguato.users WHERE username = $1 AND is_active = true LIMIT 1]],
+        username
+    )
+    if lock_res and #lock_res > 0 then
+        local lu = lock_res[1].locked_until
+        if lu then
+            -- Check if lock is still active
+            local still_locked = db.query(
+                "SELECT ($1::timestamp > NOW()) as locked", lu
+            )
+            if still_locked and #still_locked > 0 and still_locked[1].locked then
+                json.respond(429, { error = "Account temporarily locked. Try again in 15 minutes." })
+                return
+            end
+        end
+    end
+
     local res, err = db.query(
         [[SELECT id, username, role, api_token, max_instances, must_change_password
           FROM taguato.users
@@ -36,9 +57,27 @@ if method == "POST" and uri == "/api/auth/login" then
     )
 
     if not res or #res == 0 then
+        -- Increment failed attempts and possibly lock
+        if lock_res and #lock_res > 0 then
+            db.query(
+                [[UPDATE taguato.users
+                  SET failed_login_attempts = failed_login_attempts + 1,
+                      locked_until = CASE WHEN failed_login_attempts + 1 >= 5
+                                          THEN NOW() + INTERVAL '15 minutes'
+                                          ELSE locked_until END
+                  WHERE id = $1]],
+                lock_res[1].id
+            )
+        end
         json.respond(401, { error = "Invalid username or password" })
         return
     end
+
+    -- Reset failed attempts on successful login
+    db.query(
+        "UPDATE taguato.users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1",
+        res[1].id
+    )
 
     local user = res[1]
 
@@ -138,8 +177,9 @@ if method == "POST" and uri == "/api/auth/change-password" then
         return
     end
 
-    if #new_password < 6 then
-        json.respond(400, { error = "New password must be at least 6 characters" })
+    local pw_ok, pw_err = validate.validate_password(new_password)
+    if not pw_ok then
+        json.respond(400, { error = pw_err })
         return
     end
 

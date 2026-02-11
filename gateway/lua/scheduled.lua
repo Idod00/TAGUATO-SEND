@@ -4,6 +4,7 @@
 local db = require "init"
 local json = require "json"
 local cjson = require "cjson"
+local validate = require "validate"
 
 local empty_array_mt = cjson.empty_array_mt
 local function as_array(t)
@@ -105,8 +106,24 @@ if method == "POST" and uri == "/api/scheduled" then
         json.respond(400, { error = "recipients must be a non-empty array" })
         return
     end
+    if #body.recipients > 500 then
+        json.respond(400, { error = "Maximum 500 recipients allowed" })
+        return
+    end
+    -- Validate each recipient is a valid phone number
+    for _, r in ipairs(body.recipients) do
+        local phone_ok, phone_err = validate.validate_phone(tostring(r))
+        if not phone_ok then
+            json.respond(400, { error = "Invalid recipient: " .. phone_err })
+            return
+        end
+    end
     if not body.message_content or body.message_content == "" then
         json.respond(400, { error = "message_content is required" })
+        return
+    end
+    if #body.message_content > 5000 then
+        json.respond(400, { error = "message_content must be at most 5000 characters" })
         return
     end
     if not body.scheduled_at or body.scheduled_at == "" then

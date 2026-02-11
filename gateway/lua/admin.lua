@@ -3,6 +3,7 @@
 
 local db = require "init"
 local json = require "json"
+local validate = require "validate"
 
 -- Verify admin role
 local user = ngx.ctx.user
@@ -49,9 +50,29 @@ if method == "POST" and uri == "/admin/users" then
         return
     end
 
+    local uname_ok, uname_err = validate.validate_username(username)
+    if not uname_ok then
+        json.respond(400, { error = uname_err })
+        return
+    end
+
+    local pw_ok, pw_err = validate.validate_password(password)
+    if not pw_ok then
+        json.respond(400, { error = pw_err })
+        return
+    end
+
     if role ~= "user" and role ~= "admin" then
         json.respond(400, { error = "role must be 'user' or 'admin'" })
         return
+    end
+
+    if max_instances ~= nil then
+        local mi_ok, mi_err = validate.validate_positive_int(max_instances, "max_instances")
+        if not mi_ok then
+            json.respond(400, { error = mi_err })
+            return
+        end
     end
 
     local rate_limit_val = body.rate_limit
@@ -167,6 +188,11 @@ if method == "PUT" and user_id then
     end
 
     if body.password ~= nil then
+        local pw_ok, pw_err = validate.validate_password(body.password)
+        if not pw_ok then
+            json.respond(400, { error = pw_err })
+            return
+        end
         idx = idx + 1
         sets[#sets + 1] = "password_hash = crypt($" .. idx .. ", gen_salt('bf'))"
         vals[idx] = body.password

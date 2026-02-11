@@ -7,10 +7,11 @@ function _M.check()
     local http = require "resty.http"
     local cjson = require "cjson"
     local db = require "init"
+    local log = require "log"
 
     local api_key = os.getenv("AUTHENTICATION_API_KEY")
     if not api_key then
-        ngx.log(ngx.ERR, "scheduled_worker: AUTHENTICATION_API_KEY not set")
+        log.err("scheduled_worker", "AUTHENTICATION_API_KEY not set")
         return
     end
 
@@ -36,7 +37,7 @@ function _M.check()
 
         local ok_parse, recipients = pcall(cjson.decode, msg.recipients)
         if not ok_parse or type(recipients) ~= "table" then
-            ngx.log(ngx.ERR, "scheduled_worker: invalid recipients JSON for message ", msg.id)
+            log.err("scheduled_worker", "invalid recipients JSON", { message_id = msg.id })
             db.query(
                 "UPDATE taguato.scheduled_messages SET status = 'failed', results = $1, updated_at = NOW() WHERE id = $2",
                 cjson.encode({ total = 0, sent = 0, failed = 0, errors = { "Invalid recipients JSON" } }),
@@ -145,8 +146,9 @@ function _M.check()
             final_status, results, msg.id
         )
 
-        ngx.log(ngx.INFO, "scheduled_worker: message ", msg.id, " ", final_status,
-                " (sent=", sent_count, " failed=", failed_count, ")")
+        log.info("scheduled_worker", "message processed", {
+            message_id = msg.id, status = final_status, sent = sent_count, failed = failed_count
+        })
 
         ::continue::
     end
