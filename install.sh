@@ -355,6 +355,11 @@ else
 fi
 
 if [ "${SKIP_ENV:-false}" = false ]; then
+    if [ ! -f ".env.example" ]; then
+        error "No se encontro .env.example en $(pwd)"
+        info "Asegurate de estar dentro del directorio TAGUATO-SEND"
+        exit 1
+    fi
     cp .env.example .env
     info "Copiado .env.example -> .env"
 
@@ -405,6 +410,12 @@ if [ "${SKIP_ENV:-false}" = false ]; then
     # Clean up macOS sed backup files
     rm -f .env''
 
+    # Verify .env was created
+    if [ ! -f ".env" ]; then
+        error "Fallo al crear el archivo .env"
+        exit 1
+    fi
+
     success "Archivo .env configurado con valores seguros"
     echo ""
     echo "  ${CYAN}GATEWAY_PORT${RESET}          = ${GW_PORT}"
@@ -415,24 +426,32 @@ if [ "${SKIP_ENV:-false}" = false ]; then
 fi
 
 # ============================================
-# Step 5b: Open firewall ports (Linux only)
+# Step 5b: Configure firewall (Linux only)
 # ============================================
 if [ "$OS_TYPE" = "linux" ] || [ "$OS_TYPE" = "wsl" ]; then
     if command -v ufw &>/dev/null; then
-        UFW_STATUS=$(sudo ufw status 2>/dev/null | head -1 || echo "")
-        if echo "$UFW_STATUS" | grep -qi "active"; then
-            step "Configurando firewall (ufw)..."
-            # Read gateway port from .env
-            FW_PORT="${GW_PORT:-80}"
-            if [ -z "$FW_PORT" ] || [ "$FW_PORT" = "" ]; then
-                FW_PORT=$(grep '^GATEWAY_PORT=' .env 2>/dev/null | cut -d= -f2 || echo "80")
-            fi
-            sudo ufw allow 22/tcp comment "SSH" >/dev/null 2>&1
-            sudo ufw allow "$FW_PORT"/tcp comment "TAGUATO Gateway" >/dev/null 2>&1 && success "Puerto $FW_PORT/tcp abierto"
-            sudo ufw allow 443/tcp comment "TAGUATO HTTPS" >/dev/null 2>&1 && success "Puerto 443/tcp abierto"
-        else
-            info "Firewall (ufw) no activo - no se necesita abrir puertos"
+        step "Configurando firewall (ufw)..."
+
+        FW_PORT="${GW_PORT:-80}"
+        if [ -z "$FW_PORT" ] || [ "$FW_PORT" = "" ]; then
+            FW_PORT=$(grep '^GATEWAY_PORT=' .env 2>/dev/null | cut -d= -f2 || echo "80")
         fi
+
+        # Always allow SSH first (safety net)
+        sudo ufw allow 22/tcp comment "SSH" >/dev/null 2>&1
+
+        # Allow TAGUATO ports
+        sudo ufw allow "$FW_PORT"/tcp comment "TAGUATO Gateway" >/dev/null 2>&1
+        sudo ufw allow 443/tcp comment "TAGUATO HTTPS" >/dev/null 2>&1
+
+        # Enable ufw if not active
+        UFW_STATUS=$(sudo ufw status 2>/dev/null | head -1 || echo "")
+        if ! echo "$UFW_STATUS" | grep -qi "active"; then
+            info "Activando firewall..."
+            sudo ufw --force enable >/dev/null 2>&1
+        fi
+
+        success "Firewall configurado (SSH:22, Gateway:$FW_PORT, HTTPS:443)"
     fi
 fi
 
@@ -440,6 +459,13 @@ fi
 # Step 6: Build and deploy
 # ============================================
 step "Construyendo e iniciando servicios..."
+
+# Final check: .env must exist for docker compose
+if [ ! -f ".env" ]; then
+    error "Archivo .env no encontrado en $(pwd)"
+    info "Ejecuta el script de nuevo desde el directorio del proyecto."
+    exit 1
+fi
 
 info "Esto puede tomar unos minutos la primera vez..."
 
