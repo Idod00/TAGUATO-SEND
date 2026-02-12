@@ -1,5 +1,5 @@
 // TAGUATO-SEND Service Worker
-const CACHE_NAME = 'taguato-v1';
+const CACHE_NAME = 'taguato-v2';
 const STATIC_ASSETS = [
   '/panel/',
   '/panel/index.html',
