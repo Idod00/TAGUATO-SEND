@@ -183,11 +183,13 @@ CREATE TABLE IF NOT EXISTS taguato.sessions (
     user_agent TEXT,
     last_active TIMESTAMP DEFAULT NOW(),
     is_active BOOLEAN DEFAULT true,
+    expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours'),
     created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON taguato.sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_token ON taguato.sessions(token_hash);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON taguato.sessions(expires_at) WHERE is_active = true;
 
 -- ============================================
 -- Message logs
@@ -280,6 +282,9 @@ CREATE TABLE IF NOT EXISTS taguato.user_webhooks (
     webhook_url TEXT NOT NULL,
     events TEXT[] DEFAULT '{}',
     is_active BOOLEAN DEFAULT true,
+    retry_count INT DEFAULT 0,
+    last_error TEXT,
+    needs_sync BOOLEAN DEFAULT false,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(user_id, instance_name)

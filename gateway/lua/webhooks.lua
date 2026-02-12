@@ -128,8 +128,15 @@ if method == "POST" and uri == "/api/webhooks" then
             }
         )
         if not api_res or api_res.status >= 400 then
-            ngx.log(ngx.WARN, "webhooks: failed to set webhook in Evolution API: ",
-                api_err or (api_res and api_res.status))
+            local err_msg = api_err or (api_res and "status " .. api_res.status) or "unknown"
+            ngx.log(ngx.WARN, "webhooks: failed to set webhook in Evolution API: ", err_msg)
+            -- Mark for retry by cleanup worker
+            db.query(
+                [[UPDATE taguato.user_webhooks
+                  SET needs_sync = true, last_error = $1, updated_at = NOW()
+                  WHERE id = $2]],
+                err_msg, res[1].id
+            )
         end
     end
 

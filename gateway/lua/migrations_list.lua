@@ -27,4 +27,17 @@ return {
             CREATE INDEX IF NOT EXISTS idx_webhooks_user ON taguato.user_webhooks(user_id);
         ]],
     },
+    {
+        version = 3,
+        name = "session_expiry_and_webhook_retry",
+        sql = [[
+            ALTER TABLE taguato.sessions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP DEFAULT (NOW() + INTERVAL '24 hours');
+            UPDATE taguato.sessions SET expires_at = created_at + INTERVAL '24 hours' WHERE expires_at IS NULL;
+            CREATE INDEX IF NOT EXISTS idx_sessions_expires ON taguato.sessions(expires_at) WHERE is_active = true;
+
+            ALTER TABLE taguato.user_webhooks ADD COLUMN IF NOT EXISTS retry_count INT DEFAULT 0;
+            ALTER TABLE taguato.user_webhooks ADD COLUMN IF NOT EXISTS last_error TEXT;
+            ALTER TABLE taguato.user_webhooks ADD COLUMN IF NOT EXISTS needs_sync BOOLEAN DEFAULT false;
+        ]],
+    },
 }

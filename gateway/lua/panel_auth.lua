@@ -85,13 +85,13 @@ if method == "POST" and uri == "/api/auth/login" then
     local audit = require "audit"
     audit.log(user.id, user.username, "user_login", "session", nil, nil, ngx.var.remote_addr)
 
-    -- Create session record
+    -- Create session record (24h TTL)
     local ip = ngx.var.remote_addr or "unknown"
     local ua = ngx.req.get_headers()["User-Agent"] or "unknown"
     local token_hash = ngx.md5(user.api_token)
     db.query(
-        [[INSERT INTO taguato.sessions (user_id, token_hash, ip_address, user_agent)
-          VALUES ($1, $2, $3, $4)]],
+        [[INSERT INTO taguato.sessions (user_id, token_hash, ip_address, user_agent, expires_at)
+          VALUES ($1, $2, $3, $4, NOW() + INTERVAL '24 hours')]],
         user.id, token_hash, ip, ua
     )
 
@@ -133,6 +133,34 @@ if method == "GET" and uri == "/api/auth/me" then
     if not user.is_active then
         json.respond(403, { error = "Account is disabled" })
         return
+    end
+
+    -- Check session expiration (panel sessions only)
+    local token_hash = ngx.md5(token)
+    local sess = db.query(
+        [[SELECT id, expires_at FROM taguato.sessions
+          WHERE token_hash = $1 AND user_id = $2 AND is_active = true
+          ORDER BY created_at DESC LIMIT 1]],
+        token_hash, user.id
+    )
+    if sess and #sess > 0 then
+        -- Check if session has expired
+        local expired = db.query(
+            "SELECT ($1::timestamp < NOW()) as expired", sess[1].expires_at
+        )
+        if expired and #expired > 0 and expired[1].expired then
+            -- Deactivate expired session
+            db.query("UPDATE taguato.sessions SET is_active = false WHERE id = $1", sess[1].id)
+            json.respond(401, { error = "Session expired, please login again" })
+            return
+        end
+        -- Extend session: update last_active and push expires_at forward
+        db.query(
+            [[UPDATE taguato.sessions
+              SET last_active = NOW(), expires_at = NOW() + INTERVAL '24 hours'
+              WHERE id = $1]],
+            sess[1].id
+        )
     end
 
     -- Fetch user instances
