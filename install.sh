@@ -253,24 +253,62 @@ if [ ${#missing[@]} -gt 0 ]; then
 fi
 
 # ============================================
-# Step 3: Verify Docker is running
+# Step 3: Verify Docker is running + fix permissions
 # ============================================
 step "Verificando que Docker esta corriendo..."
 
 if ! docker info &>/dev/null 2>&1; then
-    error "Docker no esta corriendo."
-    echo ""
-    case "$OS_TYPE" in
-        linux|wsl)
-            info "Intenta: sudo systemctl start docker"
-            ;;
-        macos|gitbash)
-            info "Abre Docker Desktop y espera a que este listo."
-            ;;
-    esac
-    exit 1
+    # Check if it's a permission issue (Docker is running but user can't access)
+    if sudo docker info &>/dev/null 2>&1; then
+        warn "Docker esta corriendo pero tu usuario no tiene permisos."
+        info "Agregando '$USER' al grupo docker..."
+        sudo usermod -aG docker "$USER"
+        # Apply group in current session via sg
+        info "Aplicando permisos... (las siguientes operaciones usaran sudo si es necesario)"
+        # Re-define compose command with sudo fallback
+        if sg docker -c "docker compose version" &>/dev/null 2>&1; then
+            COMPOSE_CMD="sg docker -c 'docker compose'"
+            # Actually, sg in subshells is tricky. Use sudo instead.
+            COMPOSE_CMD="sudo docker compose"
+        elif sudo docker compose version &>/dev/null 2>&1; then
+            COMPOSE_CMD="sudo docker compose"
+        fi
+        success "Docker esta corriendo (usando permisos elevados para esta sesion)"
+        info "En futuras sesiones no necesitaras sudo (cierra sesion y vuelve a entrar)"
+    else
+        # Docker genuinely not running
+        case "$OS_TYPE" in
+            linux|wsl)
+                info "Intentando iniciar Docker..."
+                sudo systemctl start docker && sudo systemctl enable docker
+                if sudo docker info &>/dev/null 2>&1; then
+                    success "Docker iniciado correctamente"
+                    # Also fix permissions
+                    if ! groups "$USER" | grep -q '\bdocker\b'; then
+                        sudo usermod -aG docker "$USER"
+                    fi
+                    COMPOSE_CMD="sudo docker compose"
+                else
+                    error "No se pudo iniciar Docker."
+                    info "Revisa: sudo journalctl -u docker"
+                    exit 1
+                fi
+                ;;
+            macos|gitbash)
+                error "Docker no esta corriendo."
+                info "Abre Docker Desktop y espera a que este listo."
+                exit 1
+                ;;
+            *)
+                error "Docker no esta corriendo."
+                exit 1
+                ;;
+        esac
+    fi
+else
+    success "Docker esta corriendo"
 fi
-success "Docker esta corriendo"
+
 
 # ============================================
 # Step 4: Clone or detect repo
@@ -377,13 +415,35 @@ if [ "${SKIP_ENV:-false}" = false ]; then
 fi
 
 # ============================================
+# Step 5b: Open firewall ports (Linux only)
+# ============================================
+if [ "$OS_TYPE" = "linux" ] || [ "$OS_TYPE" = "wsl" ]; then
+    if command -v ufw &>/dev/null; then
+        UFW_STATUS=$(sudo ufw status 2>/dev/null | head -1 || echo "")
+        if echo "$UFW_STATUS" | grep -qi "active"; then
+            step "Configurando firewall (ufw)..."
+            # Read gateway port from .env
+            FW_PORT="${GW_PORT:-80}"
+            if [ -z "$FW_PORT" ] || [ "$FW_PORT" = "" ]; then
+                FW_PORT=$(grep '^GATEWAY_PORT=' .env 2>/dev/null | cut -d= -f2 || echo "80")
+            fi
+            sudo ufw allow 22/tcp comment "SSH" >/dev/null 2>&1
+            sudo ufw allow "$FW_PORT"/tcp comment "TAGUATO Gateway" >/dev/null 2>&1 && success "Puerto $FW_PORT/tcp abierto"
+            sudo ufw allow 443/tcp comment "TAGUATO HTTPS" >/dev/null 2>&1 && success "Puerto 443/tcp abierto"
+        else
+            info "Firewall (ufw) no activo - no se necesita abrir puertos"
+        fi
+    fi
+fi
+
+# ============================================
 # Step 6: Build and deploy
 # ============================================
 step "Construyendo e iniciando servicios..."
 
 info "Esto puede tomar unos minutos la primera vez..."
 
-$COMPOSE_CMD up -d --build &
+eval $COMPOSE_CMD up -d --build &
 BUILD_PID=$!
 spinner $BUILD_PID "Construyendo contenedores..."
 wait $BUILD_PID
@@ -407,8 +467,8 @@ ALL_HEALTHY=false
 
 while [ $ELAPSED -lt $HEALTH_TIMEOUT ]; do
     # Check if all containers are running
-    RUNNING=$($COMPOSE_CMD ps --format '{{.Status}}' 2>/dev/null | grep -ci 'up' || true)
-    TOTAL=$($COMPOSE_CMD ps --format '{{.Status}}' 2>/dev/null | wc -l | tr -d ' ' || true)
+    RUNNING=$(eval $COMPOSE_CMD ps --format '{{.Status}}' 2>/dev/null | grep -ci 'up' || true)
+    TOTAL=$(eval $COMPOSE_CMD ps --format '{{.Status}}' 2>/dev/null | wc -l | tr -d ' ' || true)
 
     if [ "$TOTAL" -gt 0 ] && [ "$RUNNING" -eq "$TOTAL" ]; then
         ALL_HEALTHY=true
@@ -439,12 +499,12 @@ sleep 5
 step "Obteniendo token del administrador..."
 
 ADMIN_TOKEN=""
-ADMIN_TOKEN=$($COMPOSE_CMD logs taguato-postgres 2>/dev/null | grep "API Token:" | tail -1 | sed 's/.*API Token: //' | tr -d '[:space:]' || true)
+ADMIN_TOKEN=$(eval $COMPOSE_CMD logs taguato-postgres 2>/dev/null | grep "API Token:" | tail -1 | sed 's/.*API Token: //' | tr -d '[:space:]' || true)
 
 if [ -z "$ADMIN_TOKEN" ]; then
     # Try waiting a bit more and retry
     sleep 5
-    ADMIN_TOKEN=$($COMPOSE_CMD logs taguato-postgres 2>/dev/null | grep "API Token:" | tail -1 | sed 's/.*API Token: //' | tr -d '[:space:]' || true)
+    ADMIN_TOKEN=$(eval $COMPOSE_CMD logs taguato-postgres 2>/dev/null | grep "API Token:" | tail -1 | sed 's/.*API Token: //' | tr -d '[:space:]' || true)
 fi
 
 # ============================================
