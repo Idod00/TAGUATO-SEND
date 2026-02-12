@@ -164,29 +164,92 @@ fi
 
 if [ ${#missing[@]} -gt 0 ]; then
     echo ""
-    error "Faltan dependencias: ${missing[*]}"
-    echo ""
-    info "Instrucciones de instalacion:"
+    warn "Faltan dependencias: ${missing[*]}"
+
     case "$OS_TYPE" in
         linux|wsl)
-            echo "  sudo apt update && sudo apt install -y git docker.io docker-compose-plugin"
-            echo "  sudo systemctl start docker && sudo systemctl enable docker"
-            echo "  sudo usermod -aG docker \$USER  # (cerrar sesion y volver a entrar)"
+            echo ""
+            if [ "$UNATTENDED" = true ]; then
+                INSTALL_AUTO=true
+            else
+                read -rp "  ${YELLOW}Instalar Docker automaticamente? (S/n):${RESET} " install_answer
+                if [[ "$install_answer" =~ ^[nN]$ ]]; then
+                    INSTALL_AUTO=false
+                else
+                    INSTALL_AUTO=true
+                fi
+            fi
+
+            if [ "$INSTALL_AUTO" = true ]; then
+                step "Instalando Docker desde el repositorio oficial..."
+
+                sudo apt-get update -qq
+                sudo apt-get install -y ca-certificates curl
+
+                sudo install -m 0755 -d /etc/apt/keyrings
+                sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+                sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+                echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+                sudo apt-get update -qq
+                sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+                sudo systemctl enable docker && sudo systemctl start docker
+
+                # Add current user to docker group
+                if ! groups "$USER" | grep -q '\bdocker\b'; then
+                    sudo usermod -aG docker "$USER"
+                    warn "Se agrego '$USER' al grupo docker."
+                    info "Si docker falla mas adelante, cierra sesion y vuelve a entrar."
+                    # Use newgrp to apply group in current session
+                    info "Aplicando grupo docker en la sesion actual..."
+                fi
+
+                # Re-check docker compose
+                if docker compose version &>/dev/null 2>&1; then
+                    COMPOSE_CMD="docker compose"
+                    success "docker compose $(docker compose version --short 2>/dev/null || echo '(v2)')"
+                fi
+
+                success "Docker instalado correctamente"
+            else
+                echo ""
+                info "Instrucciones de instalacion manual:"
+                echo "  # Repo oficial de Docker:"
+                echo "  sudo apt-get update && sudo apt-get install -y ca-certificates curl"
+                echo "  sudo install -m 0755 -d /etc/apt/keyrings"
+                echo "  sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc"
+                echo "  sudo chmod a+r /etc/apt/keyrings/docker.asc"
+                echo "  echo \"deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \$(. /etc/os-release && echo \"\$VERSION_CODENAME\") stable\" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null"
+                echo "  sudo apt-get update && sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin"
+                echo "  sudo systemctl enable docker && sudo systemctl start docker"
+                echo "  sudo usermod -aG docker \$USER  # (cerrar sesion y volver a entrar)"
+                exit 1
+            fi
             ;;
         macos)
+            echo ""
+            info "Instrucciones de instalacion:"
             echo "  brew install git"
             echo "  Instalar Docker Desktop: https://docs.docker.com/desktop/install/mac-install/"
+            exit 1
             ;;
         gitbash)
+            echo ""
+            info "Instrucciones de instalacion:"
             echo "  Instalar Git: https://git-scm.com/download/win"
             echo "  Instalar Docker Desktop: https://docs.docker.com/desktop/install/windows-install/"
+            exit 1
             ;;
         *)
+            echo ""
+            info "Instrucciones de instalacion:"
             echo "  Instalar git: https://git-scm.com/"
             echo "  Instalar Docker: https://docs.docker.com/get-docker/"
+            exit 1
             ;;
     esac
-    exit 1
 fi
 
 # ============================================
