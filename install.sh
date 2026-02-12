@@ -408,7 +408,9 @@ if [ "${SKIP_ENV:-false}" = false ]; then
     $SED_I "s|GATEWAY_PORT=80|GATEWAY_PORT=${GW_PORT}|g" .env
 
     # Clean up macOS sed backup files
-    rm -f .env''
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        rm -f ".env''"
+    fi
 
     # Verify .env was created
     if [ ! -f ".env" ]; then
