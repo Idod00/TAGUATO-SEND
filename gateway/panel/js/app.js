@@ -262,10 +262,20 @@ const App = (() => {
     }
   }
 
+  let _qrPollTimer = null;
+
+  function stopQrPolling() {
+    if (_qrPollTimer) {
+      clearInterval(_qrPollTimer);
+      _qrPollTimer = null;
+    }
+  }
+
   async function connectInstance(name) {
     const modal = $('#qr-modal');
     const content = $('#qr-content');
     content.innerHTML = '<div class="loading">Obteniendo QR...</div>';
+    stopQrPolling();
     show(modal);
     try {
       const data = await API.connectInstance(name);
@@ -274,10 +284,12 @@ const App = (() => {
           <p>Escanea el QR con WhatsApp:</p>
           <img src="${data.base64}" alt="QR Code" class="qr-img" />
           <p class="hint">El QR expira en ~40 segundos</p>`;
+        startQrPolling(name, modal, content);
       } else if (data.pairingCode) {
         content.innerHTML = `
           <p>Codigo de vinculacion:</p>
           <div class="pairing-code">${esc(data.pairingCode)}</div>`;
+        startQrPolling(name, modal, content);
       } else if (data.instance?.state === 'open') {
         content.innerHTML = '<p class="success-msg">Instancia ya conectada</p>';
       } else {
@@ -286,6 +298,28 @@ const App = (() => {
     } catch (err) {
       content.innerHTML = `<p class="error-msg">${esc(err.message || 'Error al conectar')}</p>`;
     }
+  }
+
+  function startQrPolling(name, modal, content) {
+    let attempts = 0;
+    const maxAttempts = 40;
+    _qrPollTimer = setInterval(async () => {
+      attempts++;
+      if (attempts > maxAttempts || modal.classList.contains('hidden')) {
+        stopQrPolling();
+        return;
+      }
+      try {
+        const status = await API.getInstanceStatus(name);
+        const state = status.instance?.state || status.state;
+        if (state === 'open') {
+          stopQrPolling();
+          content.innerHTML = '<p class="success-msg">Conexion exitosa</p>';
+          loadInstances();
+          setTimeout(() => closeModal('qr-modal'), 2000);
+        }
+      } catch (_) { /* ignore polling errors */ }
+    }, 3000);
   }
 
   function confirmDeleteInstance(name) {
@@ -2263,6 +2297,7 @@ const App = (() => {
 
   // --- Modals ---
   function closeModal(id) {
+    if (id === 'qr-modal') stopQrPolling();
     hide($('#' + id));
   }
 
