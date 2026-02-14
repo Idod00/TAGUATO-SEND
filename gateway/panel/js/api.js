@@ -157,6 +157,18 @@ const API = (() => {
     return await request('DELETE', '/admin/sessions/' + id);
   }
 
+  async function logoutInstance(instanceName) {
+    return await request('DELETE', '/instance/logout/' + instanceName);
+  }
+
+  async function restartInstance(instanceName) {
+    return await request('PUT', '/instance/restart/' + instanceName);
+  }
+
+  async function getInstanceStats(instanceName) {
+    return await request('GET', '/api/instance/stats/' + instanceName);
+  }
+
   // Media
   async function sendMedia(instanceName, number, mediatype, media, caption, fileName) {
     const body = { number, mediatype, media };
@@ -389,6 +401,7 @@ const API = (() => {
     getToken, getStoredUser, setSession, clearSession,
     login, logout, getProfile, changePassword,
     fetchInstances, createInstance, deleteInstance, connectInstance, getInstanceStatus,
+    logoutInstance, restartInstance, getInstanceStats,
     sendText, sendMedia, sendBulkText, cancelBulk,
     listScheduled, createScheduled, getScheduled, updateScheduled, cancelScheduled,
     logMessage, getMessageLogs,

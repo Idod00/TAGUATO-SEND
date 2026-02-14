@@ -1597,3 +1597,202 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   text-align: center;
   white-space: nowrap;
 }
+
+/* Warning button */
+.btn-warning { background: var(--warning); color: #fff; }
+.btn-warning:hover:not(:disabled) { background: #b45309; }
+[data-theme="dark"] .btn-warning { background: #b45309; }
+[data-theme="dark"] .btn-warning:hover:not(:disabled) { background: #92400e; }
+
+/* Instance Detail Panel */
+.detail-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 0.85rem;
+  background: var(--bg);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+
+.detail-status-bar .badge { font-size: 0.8rem; }
+
+.detail-registered {
+  color: var(--text-light);
+  font-size: 0.8rem;
+}
+
+.detail-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.detail-stat {
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.6rem;
+  text-align: center;
+}
+
+.detail-stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.detail-stat-label {
+  font-size: 0.7rem;
+  color: var(--text-light);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 0.15rem;
+}
+
+.detail-stat-success .detail-stat-value { color: var(--success); }
+.detail-stat-danger .detail-stat-value { color: var(--danger); }
+
+.detail-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.detail-actions .btn { flex: 1; min-width: 0; }
+
+.detail-chart {
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.detail-chart-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-light);
+  margin-bottom: 0.5rem;
+}
+
+.detail-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 120px;
+}
+
+.detail-bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 30px;
+  max-width: 70px;
+}
+
+.detail-bar-stack {
+  width: 100%;
+  display: flex;
+  flex-direction: column-reverse;
+  border-radius: 3px 3px 0 0;
+  overflow: hidden;
+  min-height: 3px;
+}
+
+.detail-bar-sent {
+  background: var(--success);
+}
+
+.detail-bar-failed {
+  background: var(--danger);
+}
+
+.detail-bar-value {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.2rem;
+}
+
+.detail-bar-label {
+  font-size: 0.65rem;
+  color: var(--text-light);
+  margin-top: 0.25rem;
+  white-space: nowrap;
+}
+
+.detail-section {
+  margin-bottom: 0.75rem;
+}
+
+.detail-section summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-light);
+  padding: 0.5rem 0;
+  user-select: none;
+}
+
+.detail-section summary:hover { color: var(--text); }
+
+.detail-error-list, .detail-reconnect-list {
+  max-height: 200px;
+  overflow-y: auto;
+  font-size: 0.8rem;
+}
+
+.detail-error-item, .detail-reconnect-item {
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.detail-error-item:last-child, .detail-reconnect-item:last-child {
+  border-bottom: none;
+}
+
+.detail-item-time {
+  color: var(--text-light);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+.detail-item-text {
+  flex: 1;
+  word-break: break-word;
+}
+
+.detail-empty {
+  color: var(--text-light);
+  font-size: 0.8rem;
+  font-style: italic;
+  padding: 0.5rem 0;
+}
+
+/* Dark mode for instance detail */
+[data-theme="dark"] .detail-status-bar { background: #1a1212; }
+[data-theme="dark"] .detail-stat { background: #1a1212; }
+[data-theme="dark"] .detail-chart { background: #1a1212; }
+
+/* Instance card clickable name */
+.instance-name-link {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.instance-name-link:hover { color: var(--primary); }
+
+/* Responsive detail */
+@media (max-width: 768px) {
+  .detail-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .detail-actions { flex-wrap: wrap; }
+  .detail-actions .btn { flex: 1 1 45%; }
+}

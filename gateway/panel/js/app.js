@@ -12,6 +12,7 @@ const App = (() => {
   let scheduledPage = 1;
   let emojiPickerTarget = null;
   let emojiPickerCategory = 0;
+  let _detailRefreshTimer = null;
 
   const EMOJI_DATA = [
     { icon: '\u{1F600}', name: 'Caras', emojis: ['\u{1F600}','\u{1F603}','\u{1F604}','\u{1F601}','\u{1F606}','\u{1F605}','\u{1F602}','\u{1F923}','\u{1F60A}','\u{1F607}','\u{1F642}','\u{1F643}','\u{1F609}','\u{1F60C}','\u{1F60D}','\u{1F970}','\u{1F618}','\u{1F617}','\u{1F619}','\u{1F61A}','\u{1F60B}','\u{1F61B}','\u{1F61C}','\u{1F92A}','\u{1F61D}','\u{1F911}','\u{1F917}','\u{1F92D}','\u{1F92B}','\u{1F914}','\u{1F910}','\u{1F928}','\u{1F610}','\u{1F611}','\u{1F636}','\u{1F60F}','\u{1F612}','\u{1F644}','\u{1F62C}','\u{1F925}','\u{1F614}','\u{1F61E}','\u{1F61F}','\u{1F615}','\u{1F641}','\u{2639}','\u{1F623}','\u{1F616}','\u{1F62B}','\u{1F629}','\u{1F622}','\u{1F62D}','\u{1F624}','\u{1F620}','\u{1F621}','\u{1F973}','\u{1F974}','\u{1F976}','\u{1F975}'] },
@@ -233,15 +234,19 @@ const App = (() => {
       const state = inst.instance?.state || inst.connectionStatus || inst.state || 'unknown';
       const stateClass = state === 'open' ? 'connected' : (state === 'connecting' ? 'connecting' : 'disconnected');
       const stateLabel = state === 'open' ? 'Conectado' : (state === 'connecting' ? 'Conectando' : 'Desconectado');
+      const escapedName = esc(name);
       return `
         <div class="card instance-card">
           <div class="instance-info">
-            <h3>${esc(name)}</h3>
-            <span class="badge badge-${stateClass}">${stateLabel}</span>
+            <h3 class="instance-name-link" onclick="App.openInstanceDetail('${escapedName}')">${escapedName}</h3>
+            <span class="badge badge-${stateClass}" style="cursor:pointer" onclick="App.openInstanceDetail('${escapedName}')">${stateLabel}</span>
           </div>
           <div class="instance-actions">
-            ${state !== 'open' ? `<button class="btn btn-sm btn-primary" onclick="App.connectInstance('${esc(name)}')">Conectar</button>` : ''}
-            <button class="btn btn-sm btn-danger" onclick="App.confirmDeleteInstance('${esc(name)}')">Eliminar</button>
+            <button class="btn btn-sm btn-secondary" onclick="App.openInstanceDetail('${escapedName}')">Detalles</button>
+            ${state === 'open'
+              ? `<button class="btn btn-sm btn-warning" onclick="App.logoutInstance('${escapedName}')">Desconectar</button>`
+              : `<button class="btn btn-sm btn-primary" onclick="App.connectInstance('${escapedName}')">Conectar</button>`}
+            <button class="btn btn-sm btn-danger" onclick="App.confirmDeleteInstance('${escapedName}')">Eliminar</button>
           </div>
         </div>`;
     }).join('');
@@ -335,6 +340,187 @@ const App = (() => {
       loadInstances();
     } catch (err) {
       showToast(err.message || 'Error al eliminar', 'error');
+    }
+  }
+
+  // --- Instance Detail ---
+  async function openInstanceDetail(name) {
+    const modal = $('#instance-detail-modal');
+    const content = $('#instance-detail-content');
+    $('#instance-detail-title').textContent = name;
+    content.innerHTML = '<div class="loading">Cargando estadisticas...</div>';
+
+    // Stop any previous refresh
+    if (_detailRefreshTimer) { clearInterval(_detailRefreshTimer); _detailRefreshTimer = null; }
+    show(modal);
+
+    try {
+      const [stats, statusRes] = await Promise.all([
+        API.getInstanceStats(name),
+        API.getInstanceStatus(name).catch(() => null),
+      ]);
+
+      const state = statusRes?.instance?.state || statusRes?.state || 'unknown';
+      const stateClass = state === 'open' ? 'connected' : (state === 'connecting' ? 'connecting' : 'disconnected');
+      const stateLabel = state === 'open' ? 'Conectado' : (state === 'connecting' ? 'Conectando' : 'Desconectado');
+
+      let html = '';
+
+      // Status bar
+      html += `<div class="detail-status-bar">
+        <span id="detail-state-badge" class="badge badge-${stateClass}">${stateLabel}</span>
+        ${stats.registered_at ? `<span class="detail-registered">Registrada: ${esc(stats.registered_at)}</span>` : ''}
+      </div>`;
+
+      // Stats grid
+      html += `<div class="detail-stats-grid">
+        <div class="detail-stat">
+          <div class="detail-stat-value">${stats.total}</div>
+          <div class="detail-stat-label">Total</div>
+        </div>
+        <div class="detail-stat detail-stat-success">
+          <div class="detail-stat-value">${stats.sent}</div>
+          <div class="detail-stat-label">Enviados</div>
+        </div>
+        <div class="detail-stat detail-stat-danger">
+          <div class="detail-stat-value">${stats.failed}</div>
+          <div class="detail-stat-label">Fallidos</div>
+        </div>
+        <div class="detail-stat">
+          <div class="detail-stat-value">${stats.delivery_rate}%</div>
+          <div class="detail-stat-label">Delivery</div>
+        </div>
+      </div>`;
+
+      // Actions
+      const escapedName = esc(name);
+      html += `<div class="detail-actions">`;
+      if (state === 'open') {
+        html += `<button class="btn btn-sm btn-warning" onclick="App.logoutInstance('${escapedName}')">Desconectar</button>`;
+      } else {
+        html += `<button class="btn btn-sm btn-primary" onclick="App.connectInstance('${escapedName}');App.closeModal('instance-detail-modal')">Conectar</button>`;
+      }
+      html += `<button class="btn btn-sm btn-secondary" onclick="App.restartInstance('${escapedName}')">Reiniciar</button>`;
+      html += `<button class="btn btn-sm btn-danger" onclick="App.confirmDeleteInstance('${escapedName}');App.closeModal('instance-detail-modal')">Eliminar</button>`;
+      html += `</div>`;
+
+      // Daily chart
+      if (stats.daily && stats.daily.length > 0) {
+        const maxVal = Math.max(...stats.daily.map(d => (d.sent || 0) + (d.failed || 0)), 1);
+        html += `<div class="detail-chart">
+          <div class="detail-chart-title">Mensajes por dia (7 dias)</div>
+          <div class="detail-bar-chart">`;
+        stats.daily.forEach(d => {
+          const s = parseInt(d.sent) || 0;
+          const f = parseInt(d.failed) || 0;
+          const total = s + f;
+          const hSent = Math.max(Math.round((s / maxVal) * 100), total > 0 ? 2 : 0);
+          const hFail = Math.max(Math.round((f / maxVal) * 100), f > 0 ? 2 : 0);
+          const dayLabel = d.day ? d.day.substring(5) : '';
+          html += `<div class="detail-bar-col">
+            <div class="detail-bar-value">${total}</div>
+            <div class="detail-bar-stack" style="height:${hSent + hFail}px">
+              ${f > 0 ? `<div class="detail-bar-failed" style="height:${hFail}px" title="${f} fallidos"></div>` : ''}
+              ${s > 0 ? `<div class="detail-bar-sent" style="height:${hSent}px" title="${s} enviados"></div>` : ''}
+            </div>
+            <div class="detail-bar-label">${dayLabel}</div>
+          </div>`;
+        });
+        html += `</div></div>`;
+      }
+
+      // Recent errors (collapsible)
+      html += `<details class="detail-section">
+        <summary>Errores recientes (${stats.recent_errors.length})</summary>`;
+      if (stats.recent_errors.length > 0) {
+        html += `<div class="detail-error-list">`;
+        stats.recent_errors.forEach(e => {
+          html += `<div class="detail-error-item">
+            <span class="detail-item-time">${esc(e.created_at)}</span>
+            <span class="detail-item-text">${esc(e.phone_number)} - ${esc(e.error_message || 'Sin detalle')}</span>
+          </div>`;
+        });
+        html += `</div>`;
+      } else {
+        html += `<div class="detail-empty">Sin errores recientes</div>`;
+      }
+      html += `</details>`;
+
+      // Reconnection history (collapsible)
+      html += `<details class="detail-section">
+        <summary>Historial de reconexiones (${stats.reconnections.length})</summary>`;
+      if (stats.reconnections.length > 0) {
+        html += `<div class="detail-reconnect-list">`;
+        stats.reconnections.forEach(r => {
+          const resultBadge = r.result === 'success' ? 'connected' : 'disconnected';
+          html += `<div class="detail-reconnect-item">
+            <span class="detail-item-time">${esc(r.created_at)}</span>
+            <span class="detail-item-text">${esc(r.action || '')} <span class="badge badge-${resultBadge}">${esc(r.result || '')}</span>${r.error_message ? ' - ' + esc(r.error_message) : ''}</span>
+          </div>`;
+        });
+        html += `</div>`;
+      } else {
+        html += `<div class="detail-empty">Sin historial de reconexiones</div>`;
+      }
+      html += `</details>`;
+
+      content.innerHTML = html;
+
+      // Auto-refresh state badge every 15s
+      _detailRefreshTimer = setInterval(async () => {
+        if (modal.classList.contains('hidden')) {
+          clearInterval(_detailRefreshTimer);
+          _detailRefreshTimer = null;
+          return;
+        }
+        try {
+          const st = await API.getInstanceStatus(name);
+          const s = st?.instance?.state || st?.state || 'unknown';
+          const badge = $('#detail-state-badge');
+          if (badge) {
+            const sc = s === 'open' ? 'connected' : (s === 'connecting' ? 'connecting' : 'disconnected');
+            const sl = s === 'open' ? 'Conectado' : (s === 'connecting' ? 'Conectando' : 'Desconectado');
+            badge.className = 'badge badge-' + sc;
+            badge.textContent = sl;
+          }
+        } catch (_) { /* ignore */ }
+      }, 15000);
+
+    } catch (err) {
+      content.innerHTML = `<p class="error-msg">${esc(err.message || 'Error al cargar estadisticas')}</p>`;
+    }
+  }
+
+  async function logoutInstance(name) {
+    if (!confirm('Desconectar instancia "' + name + '"?')) return;
+    try {
+      await API.logoutInstance(name);
+      showToast('Instancia desconectada');
+      loadInstances();
+      // Refresh detail modal if open
+      const modal = $('#instance-detail-modal');
+      if (!modal.classList.contains('hidden')) {
+        openInstanceDetail(name);
+      }
+    } catch (err) {
+      showToast(err.message || 'Error al desconectar', 'error');
+    }
+  }
+
+  async function restartInstance(name) {
+    try {
+      showToast('Reiniciando instancia...');
+      await API.restartInstance(name);
+      // Wait 3s then refresh
+      setTimeout(() => {
+        loadInstances();
+        const modal = $('#instance-detail-modal');
+        if (!modal.classList.contains('hidden')) {
+          openInstanceDetail(name);
+        }
+      }, 3000);
+    } catch (err) {
+      showToast(err.message || 'Error al reiniciar', 'error');
     }
   }
 
@@ -2298,6 +2484,10 @@ const App = (() => {
   // --- Modals ---
   function closeModal(id) {
     if (id === 'qr-modal') stopQrPolling();
+    if (id === 'instance-detail-modal' && _detailRefreshTimer) {
+      clearInterval(_detailRefreshTimer);
+      _detailRefreshTimer = null;
+    }
     hide($('#' + id));
   }
 
@@ -2402,6 +2592,9 @@ const App = (() => {
   return {
     connectInstance,
     confirmDeleteInstance,
+    openInstanceDetail,
+    logoutInstance,
+    restartInstance,
     editTemplate,
     confirmDeleteTemplate,
     loadContactLists,
