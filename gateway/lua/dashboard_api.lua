@@ -73,7 +73,27 @@ if uptime_res and #uptime_res > 0 then
     end
 end
 
--- 5. Recent activity (last 5 users + last 5 instances, merged)
+-- 5. Message metrics
+local messages = { today = 0, total = 0, sent = 0, failed = 0, delivery_rate = 0 }
+local msg_res = db.query([[
+    SELECT
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE status = 'sent') as sent,
+        COUNT(*) FILTER (WHERE status = 'failed') as failed,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '1 day') as today
+    FROM taguato.message_logs
+]])
+if msg_res and #msg_res > 0 then
+    messages.total = tonumber(msg_res[1].total) or 0
+    messages.sent = tonumber(msg_res[1].sent) or 0
+    messages.failed = tonumber(msg_res[1].failed) or 0
+    messages.today = tonumber(msg_res[1].today) or 0
+    if messages.total > 0 then
+        messages.delivery_rate = math.floor((messages.sent / messages.total) * 10000) / 100
+    end
+end
+
+-- 6. Recent activity (users + instances + messages + logins, merged)
 local recent_activity = {}
 
 local recent_users = db.query([[
@@ -104,17 +124,46 @@ if recent_instances then
     end
 end
 
+local recent_messages = db.query([[
+    SELECT instance_name as name, status, created_at FROM taguato.message_logs
+    ORDER BY created_at DESC LIMIT 5
+]])
+if recent_messages then
+    for _, m in ipairs(recent_messages) do
+        recent_activity[#recent_activity + 1] = {
+            type = m.status == "sent" and "message_sent" or "message_failed",
+            name = m.name,
+            created_at = m.created_at,
+        }
+    end
+end
+
+local recent_logins = db.query([[
+    SELECT username as name, created_at FROM taguato.audit_log
+    WHERE action = 'user_login'
+    ORDER BY created_at DESC LIMIT 5
+]])
+if recent_logins then
+    for _, l in ipairs(recent_logins) do
+        recent_activity[#recent_activity + 1] = {
+            type = "user_login",
+            name = l.name,
+            created_at = l.created_at,
+        }
+    end
+end
+
 -- Sort by created_at descending
 table.sort(recent_activity, function(a, b)
     return (a.created_at or "") > (b.created_at or "")
 end)
 
--- Trim to 10 max
-while #recent_activity > 10 do
+-- Trim to 15 max
+while #recent_activity > 15 do
     recent_activity[#recent_activity] = nil
 end
 
--- 6. Recent reconnections (last 5)
+-- 7. Recent reconnections (last 5)
 local recent_reconnections = db.query([[
     SELECT instance_name, previous_state, result, error_message, created_at
     FROM taguato.reconnect_log
@@ -129,6 +178,7 @@ json.respond(200, {
         connected = connected,
     },
     uptime_30d = uptime_30d,
+    messages = messages,
     recent_activity = as_array(recent_activity),
     recent_reconnections = as_array(recent_reconnections),
 })

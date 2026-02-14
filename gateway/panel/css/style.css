@@ -68,6 +68,7 @@
 
 [data-theme="dark"] .activity-icon-user { background: #3d1a1a; color: #d4a0a0; }
 [data-theme="dark"] .activity-icon-instance { background: #14532d; color: #86efac; }
+[data-theme="dark"] .activity-icon-login { background: #1e3a5f; color: #93c5fd; }
 
 [data-theme="dark"] .docs-auth-note { background: #3d2a1a; border-color: #5c3d1a; color: #fde68a; }
 
@@ -1166,6 +1167,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
 .activity-icon-user { background: #fde8e8; color: var(--primary); }
 .activity-icon-instance { background: #dcfce7; color: #166534; }
+.activity-icon-login { background: #dbeafe; color: #1e40af; }
 
 .activity-name { font-weight: 500; flex: 1; }
 .activity-time { font-size: 0.75rem; color: var(--text-light); }

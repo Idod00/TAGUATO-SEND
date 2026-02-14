@@ -1599,6 +1599,7 @@ const App = (() => {
     try {
       const data = await API.getDashboard();
 
+      const msgs = data.messages || { today: 0, total: 0, sent: 0, failed: 0, delivery_rate: 0 };
       cardsContainer.innerHTML = `
         <div class="dashboard-card">
           <div class="dash-value">${data.users.total}</div>
@@ -1619,21 +1620,35 @@ const App = (() => {
           <div class="dash-value">${data.instances.total_registered}</div>
           <div class="dash-label">Instancias Registradas</div>
           <div class="dash-sub">en base de datos</div>
+        </div>
+        <div class="dashboard-card">
+          <div class="dash-value">${msgs.today}</div>
+          <div class="dash-label">Mensajes Hoy</div>
+          <div class="dash-sub">${msgs.sent} enviados, ${msgs.failed} fallidos</div>
+        </div>
+        <div class="dashboard-card dash-green">
+          <div class="dash-value">${msgs.delivery_rate}%</div>
+          <div class="dash-label">Tasa de Entrega</div>
+          <div class="dash-sub">de ${msgs.total} mensajes totales</div>
         </div>`;
 
       const activity = data.recent_activity || [];
       if (activity.length === 0) {
         activityContainer.innerHTML = '<div class="empty">No hay actividad reciente</div>';
       } else {
+        const activityMeta = {
+          user_created:   { icon: 'U', cls: 'activity-icon-user',    label: 'Usuario creado' },
+          instance_created: { icon: 'I', cls: 'activity-icon-instance', label: 'Instancia creada' },
+          message_sent:   { icon: 'M', cls: 'activity-icon-instance', label: 'Mensaje enviado' },
+          message_failed: { icon: 'M', cls: 'activity-icon-user',    label: 'Mensaje fallido' },
+          user_login:     { icon: 'L', cls: 'activity-icon-login',   label: 'Inicio de sesion' },
+        };
         activityContainer.innerHTML = activity.map(a => {
-          const isUser = a.type === 'user_created';
-          const iconClass = isUser ? 'activity-icon-user' : 'activity-icon-instance';
-          const iconText = isUser ? 'U' : 'I';
-          const label = isUser ? 'Usuario creado' : 'Instancia creada';
+          const meta = activityMeta[a.type] || { icon: '?', cls: '', label: a.type };
           return `
             <div class="recent-activity-item">
-              <div class="activity-icon ${iconClass}">${iconText}</div>
-              <div class="activity-name">${esc(a.name)} <span style="color:var(--text-light);font-size:0.75rem;">(${label})</span></div>
+              <div class="activity-icon ${meta.cls}">${meta.icon}</div>
+              <div class="activity-name">${esc(a.name)} <span style="color:var(--text-light);font-size:0.75rem;">(${meta.label})</span></div>
               <div class="activity-time">${formatDate(a.created_at)}</div>
             </div>`;
         }).join('');
