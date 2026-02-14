@@ -234,11 +234,14 @@ const App = (() => {
       const state = inst.instance?.state || inst.connectionStatus || inst.state || 'unknown';
       const stateClass = state === 'open' ? 'connected' : (state === 'connecting' ? 'connecting' : 'disconnected');
       const stateLabel = state === 'open' ? 'Conectado' : (state === 'connecting' ? 'Conectando' : 'Desconectado');
+      const ownerJid = inst.ownerJid || inst.instance?.owner;
+      const phone = ownerJid ? ownerJid.split('@')[0] : null;
       const escapedName = esc(name);
       return `
         <div class="card instance-card">
           <div class="instance-info">
             <h3 class="instance-name-link" onclick="App.openInstanceDetail('${escapedName}')">${escapedName}</h3>
+            ${phone ? `<span style="color:var(--text-light);font-size:0.82rem">+${esc(phone)}</span>` : ''}
             <span class="badge badge-${stateClass}" style="cursor:pointer" onclick="App.openInstanceDetail('${escapedName}')">${stateLabel}</span>
           </div>
           <div class="instance-actions">
@@ -364,11 +367,16 @@ const App = (() => {
       const stateClass = state === 'open' ? 'connected' : (state === 'connecting' ? 'connecting' : 'disconnected');
       const stateLabel = state === 'open' ? 'Conectado' : (state === 'connecting' ? 'Conectando' : 'Desconectado');
 
+      const instData = instances.find(i => (i.instance?.instanceName || i.name || i.instanceName) === name);
+      const detailOwnerJid = instData?.ownerJid || instData?.instance?.owner;
+      const detailPhone = detailOwnerJid ? detailOwnerJid.split('@')[0] : null;
+
       let html = '';
 
       // Status bar
       html += `<div class="detail-status-bar">
         <span id="detail-state-badge" class="badge badge-${stateClass}">${stateLabel}</span>
+        ${detailPhone ? `<span style="color:var(--text-light);font-size:0.85rem">+${esc(detailPhone)}</span>` : ''}
         ${stats.registered_at ? `<span class="detail-registered">Registrada: ${esc(stats.registered_at)}</span>` : ''}
       </div>`;
 
