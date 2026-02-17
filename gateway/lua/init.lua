@@ -118,7 +118,7 @@ function _M.query(sql, ...)
     end
 
     if not res then
-        -- Log the template SQL (with placeholders) instead of expanded values
+        -- Log the template SQL (with placeholders) instead of expanded values to avoid leaking sensitive data
         local safe_sql = sql_template
         if #safe_sql > 200 then
             safe_sql = safe_sql:sub(1, 200) .. "..."

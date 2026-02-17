@@ -42,7 +42,16 @@ function _M.run()
     os.remove(pgpass_file)
 
     if ok then
-        log.info("backup_worker", "auto backup created", { file = backup_file })
+        -- Verify backup integrity
+        local verify_cmd = string.format("gzip -t %s 2>/dev/null", backup_file)
+        local verify_ok = os.execute(verify_cmd)
+        if not verify_ok then
+            log.err("backup_worker", "backup verification failed, file may be corrupted", { file = backup_file })
+            os.remove(backup_file)
+            return
+        end
+
+        log.info("backup_worker", "auto backup created and verified", { file = backup_file })
 
         -- Retain only last 7 auto-backups (delete older ones)
         local handle = io.popen("ls -1t /backups/taguato_auto_*.sql.gz 2>/dev/null")
