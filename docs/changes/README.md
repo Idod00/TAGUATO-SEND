@@ -19,6 +19,7 @@ Registro de todas las features y cambios implementados. Cada archivo documenta u
 | 10 | - | Programacion de envios (Scheduled Messages) | Completado | [10-scheduled-messages.md](10-scheduled-messages.md) |
 | 11 | - | Security hardening (6 fixes alta prioridad) | Completado | [11-security-hardening.md](11-security-hardening.md) |
 | 12 | - | Security hardening phase 1 (10 items pendientes) | Completado | [12-security-hardening-phase1.md](12-security-hardening-phase1.md) |
+| 13 | - | Security hardening phase 2 (12 items media/baja) | Completado | [13-security-hardening-medium-low.md](13-security-hardening-medium-low.md) |
 
 ## Convenciones
 

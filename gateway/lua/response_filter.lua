@@ -1,5 +1,6 @@
 -- Response body filter for fetchInstances
 -- Filters the response from Evolution API to only include user's instances
+-- Uses table buffer instead of string concatenation for efficiency
 
 local cjson = require "cjson"
 
@@ -12,16 +13,17 @@ if not user_instances then
     return
 end
 
--- Collect chunks
+-- Collect chunks using table buffer (avoids O(n^2) string concat)
 local chunk = ngx.arg[1]
 local eof = ngx.arg[2]
 
-if not ngx.ctx.response_body then
-    ngx.ctx.response_body = ""
+if not ngx.ctx.response_chunks then
+    ngx.ctx.response_chunks = {}
 end
 
-if chunk then
-    ngx.ctx.response_body = ngx.ctx.response_body .. chunk
+if chunk and chunk ~= "" then
+    local chunks = ngx.ctx.response_chunks
+    chunks[#chunks + 1] = chunk
 end
 
 if not eof then
@@ -31,7 +33,7 @@ if not eof then
 end
 
 -- Full body received, filter it
-local body = ngx.ctx.response_body
+local body = table.concat(ngx.ctx.response_chunks or {})
 local ok, data = pcall(cjson.decode, body)
 
 if not ok or type(data) ~= "table" then

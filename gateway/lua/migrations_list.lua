@@ -54,4 +54,12 @@ return {
             UPDATE taguato.sessions SET is_active = false WHERE is_active = true;
         ]],
     },
+    {
+        version = 6,
+        name = "scheduled_message_idempotency",
+        sql = [[
+            ALTER TABLE taguato.message_logs ADD COLUMN IF NOT EXISTS scheduled_message_id INT REFERENCES taguato.scheduled_messages(id) ON DELETE SET NULL;
+            CREATE INDEX IF NOT EXISTS idx_message_logs_scheduled ON taguato.message_logs(scheduled_message_id, phone_number) WHERE scheduled_message_id IS NOT NULL;
+        ]],
+    },
 }

@@ -21,16 +21,62 @@ function _M.get_db()
     return pg
 end
 
-function _M.query(sql, ...)
+-- Get a DB connection cached in ngx.ctx for the duration of the request.
+-- In timer context (workers), ngx.ctx is not available, so falls back to get_db().
+function _M.get_db_cached()
+    -- Timer context: no ngx.ctx available
+    if not ngx.ctx then
+        return _M.get_db()
+    end
+    if ngx.ctx._pg_conn then
+        return ngx.ctx._pg_conn
+    end
     local pg, err = _M.get_db()
     if not pg then
         return nil, err
     end
+    ngx.ctx._pg_conn = pg
+    return pg
+end
+
+-- Release the cached connection back to the pool (called from log_by_lua)
+function _M.release()
+    if ngx.ctx and ngx.ctx._pg_conn then
+        ngx.ctx._pg_conn:keepalive(10000, 10)
+        ngx.ctx._pg_conn = nil
+    end
+end
+
+-- Transaction helpers (use cached connection so BEGIN/COMMIT share the same conn)
+function _M.begin()
+    local pg, err = _M.get_db_cached()
+    if not pg then return nil, err end
+    return pg:query("BEGIN")
+end
+
+function _M.commit()
+    local pg, err = _M.get_db_cached()
+    if not pg then return nil, err end
+    return pg:query("COMMIT")
+end
+
+function _M.rollback()
+    local pg, err = _M.get_db_cached()
+    if not pg then return nil, err end
+    return pg:query("ROLLBACK")
+end
+
+function _M.query(sql, ...)
+    local pg, err = _M.get_db_cached()
+    if not pg then
+        return nil, err
+    end
+
+    -- Keep original SQL template (with $N placeholders) for safe error logging
+    local sql_template = sql
 
     -- Escape parameters and build query by replacing $1, $2, etc.
     local args = {...}
-    -- Find highest $N in query to know how many params to expect
-    -- (Lua's # operator and ipairs stop at nil, so we use select('#', ...) instead)
     local nargs = select('#', ...)
     if nargs > 0 then
         local escaped = {}
@@ -65,10 +111,19 @@ function _M.query(sql, ...)
     end
 
     local res, query_err = pg:query(sql)
-    pg:keepalive(10000, 10)
+
+    -- In timer context, return connection to pool immediately
+    if not ngx.ctx or not ngx.ctx._pg_conn then
+        pg:keepalive(10000, 10)
+    end
 
     if not res then
-        ngx.log(ngx.ERR, "Query failed: ", query_err, " SQL: ", sql)
+        -- Log the template SQL (with placeholders) instead of expanded values
+        local safe_sql = sql_template
+        if #safe_sql > 200 then
+            safe_sql = safe_sql:sub(1, 200) .. "..."
+        end
+        ngx.log(ngx.ERR, "Query failed: ", query_err, " SQL: ", safe_sql)
         return nil, query_err
     end
 

@@ -6,7 +6,7 @@ set -euo pipefail
 # Linux / macOS / WSL / Git Bash
 # ============================================
 
-REPO_URL="https://github.com/Idod00/TAGUATO-SEND.git"
+REPO_URL="${TAGUATO_REPO_URL:-https://github.com/Idod00/TAGUATO-SEND.git}"
 REPO_DIR="TAGUATO-SEND"
 HEALTH_TIMEOUT=180
 UNATTENDED=false
@@ -15,6 +15,7 @@ UNATTENDED=false
 for arg in "$@"; do
     case "$arg" in
         --unattended|-y) UNATTENDED=true ;;
+        --repo=*) REPO_URL="${arg#*=}" ;;
     esac
 done
 

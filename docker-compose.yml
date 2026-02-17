@@ -19,6 +19,8 @@ services:
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
     volumes:
       - ./backups:/backups
+      - evolution_instances:/evolution_instances:ro
+      - evolution_store:/evolution_store:ro
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:80/health"]
       interval: 30s

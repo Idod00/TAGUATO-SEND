@@ -1,10 +1,20 @@
--- Combined access handler: auth + instance filtering
--- This runs both auth.lua and instance_filter.lua logic in sequence,
+-- Combined access handler: auth + instance filtering + circuit breaker
+-- This runs auth, circuit breaker check, and instance_filter logic in sequence,
 -- since nginx only allows one access_by_lua_file per location.
+-- Uses auth_cache shared dict to reduce DB queries (10s TTL).
+
+-- Step 0: Circuit breaker check
+local cb = require "circuit_breaker"
+if cb.is_open() then
+    local json = require "json"
+    json.respond(503, { error = "Service temporarily unavailable, please retry later" })
+    return
+end
 
 -- Step 1: Authenticate
 local db = require "init"
 local json = require "json"
+local cjson = require "cjson"
 
 local token = ngx.req.get_headers()["apikey"]
 
@@ -13,17 +23,39 @@ if not token or token == "" then
     return
 end
 
-local res, err = db.query(
-    "SELECT id, username, role, max_instances, is_active, rate_limit FROM taguato.users WHERE api_token = $1 LIMIT 1",
-    token
-)
+-- Check auth cache first
+local cache = ngx.shared.auth_cache
+local cached, user
 
-if not res or #res == 0 then
-    json.respond(401, { error = "Invalid API token" })
-    return
+if cache then
+    local cached_json = cache:get("auth:" .. token)
+    if cached_json then
+        local ok, data = pcall(cjson.decode, cached_json)
+        if ok and data then
+            cached = true
+            user = data
+        end
+    end
 end
 
-local user = res[1]
+if not cached then
+    local res, err = db.query(
+        "SELECT id, username, role, max_instances, is_active, rate_limit FROM taguato.users WHERE api_token = $1 LIMIT 1",
+        token
+    )
+
+    if not res or #res == 0 then
+        json.respond(401, { error = "Invalid API token" })
+        return
+    end
+
+    user = res[1]
+
+    -- Cache the result for 10 seconds
+    if cache then
+        cache:set("auth:" .. token, cjson.encode(user), 10)
+    end
+end
 
 if not user.is_active then
     json.respond(403, { error = "Account is disabled" })

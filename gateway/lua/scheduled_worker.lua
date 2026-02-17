@@ -1,5 +1,6 @@
 -- Scheduled messages worker
 -- Runs on a timer, picks up pending messages and sends them
+-- Idempotent: checks message_logs before sending to prevent duplicates on crash recovery
 
 local _M = {}
 
@@ -15,11 +16,11 @@ function _M.check()
         return
     end
 
-    -- Fetch pending messages that are due
+    -- Fetch pending messages that are due (includes 'processing' for crash recovery)
     local pending, err = db.query(
         [[SELECT id, user_id, instance_name, message_type, message_content, recipients, scheduled_at
           FROM taguato.scheduled_messages
-          WHERE status = 'pending' AND scheduled_at <= NOW()
+          WHERE status IN ('pending', 'processing') AND scheduled_at <= NOW()
           ORDER BY scheduled_at ASC
           LIMIT 5]]
     )
@@ -49,11 +50,23 @@ function _M.check()
         local total = #recipients
         local sent_count = 0
         local failed_count = 0
+        local skipped_count = 0
         local errors = {}
 
         for i, number in ipairs(recipients) do
             number = tostring(number):gsub("^%s+", ""):gsub("%s+$", "")
             if number == "" then
+                goto next_recipient
+            end
+
+            -- Idempotency check: skip if already sent for this scheduled message
+            local already_sent = db.query(
+                "SELECT id FROM taguato.message_logs WHERE scheduled_message_id = $1 AND phone_number = $2 AND status = 'sent' LIMIT 1",
+                msg.id, number
+            )
+            if already_sent and #already_sent > 0 then
+                sent_count = sent_count + 1
+                skipped_count = skipped_count + 1
                 goto next_recipient
             end
 
@@ -108,19 +121,19 @@ function _M.check()
 
             if send_ok then
                 sent_count = sent_count + 1
-                -- Log to message_logs
+                -- Log to message_logs with scheduled_message_id for idempotency
                 db.query(
-                    [[INSERT INTO taguato.message_logs (user_id, instance_name, phone_number, message_type, status)
-                      VALUES ($1, $2, $3, $4, 'sent')]],
-                    msg.user_id, msg.instance_name, number, msg.message_type
+                    [[INSERT INTO taguato.message_logs (user_id, instance_name, phone_number, message_type, status, scheduled_message_id)
+                      VALUES ($1, $2, $3, $4, 'sent', $5)]],
+                    msg.user_id, msg.instance_name, number, msg.message_type, msg.id
                 )
             else
                 failed_count = failed_count + 1
                 errors[#errors + 1] = number .. ": " .. (send_err or "unknown")
                 db.query(
-                    [[INSERT INTO taguato.message_logs (user_id, instance_name, phone_number, message_type, status, error_message)
-                      VALUES ($1, $2, $3, $4, 'failed', $5)]],
-                    msg.user_id, msg.instance_name, number, msg.message_type, send_err
+                    [[INSERT INTO taguato.message_logs (user_id, instance_name, phone_number, message_type, status, error_message, scheduled_message_id)
+                      VALUES ($1, $2, $3, $4, 'failed', $5, $6)]],
+                    msg.user_id, msg.instance_name, number, msg.message_type, send_err, msg.id
                 )
             end
 
@@ -138,6 +151,7 @@ function _M.check()
             total = total,
             sent = sent_count,
             failed = failed_count,
+            skipped = skipped_count,
             errors = errors,
         })
 
@@ -147,7 +161,7 @@ function _M.check()
         )
 
         log.info("scheduled_worker", "message processed", {
-            message_id = msg.id, status = final_status, sent = sent_count, failed = failed_count
+            message_id = msg.id, status = final_status, sent = sent_count, failed = failed_count, skipped = skipped_count
         })
 
         ::continue::

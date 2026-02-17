@@ -32,6 +32,14 @@ local function generate_token()
     return table.concat(t)
 end
 
+-- Invalidate auth cache after user modifications
+local function invalidate_auth_cache()
+    local cache = ngx.shared.auth_cache
+    if cache then
+        cache:flush_all()
+    end
+end
+
 -- POST /admin/users - Create user
 if method == "POST" and uri == "/admin/users" then
     local body, err = json.read_body()
@@ -80,8 +88,10 @@ if method == "POST" and uri == "/admin/users" then
     -- Generate token
     local token = generate_token()
 
-    -- Hash password and insert
-    local res, err = db.query(
+    -- Use transaction: INSERT user + audit log
+    db.begin()
+
+    local res, ins_err = db.query(
         [[INSERT INTO taguato.users (username, password_hash, role, api_token, max_instances, rate_limit)
           VALUES ($1, crypt($2, gen_salt('bf')), $3, $4, $5, $6)
           RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, created_at]],
@@ -89,19 +99,29 @@ if method == "POST" and uri == "/admin/users" then
     )
 
     if not res then
-        if err and err:find("duplicate key") then
+        db.rollback()
+        if ins_err and ins_err:find("duplicate key") then
             json.respond(409, { error = "Username already exists" })
         else
-            json.respond(500, { error = "Failed to create user: " .. (err or "unknown") })
+            json.respond(500, { error = "Failed to create user: " .. (ins_err or "unknown") })
         end
         return
     end
 
-    -- Audit log
+    -- Audit log (best-effort within transaction)
     local audit = require "audit"
-    audit.log(user.id, user.username, "user_created", "user", tostring(res[1].id),
+    local audit_ok = pcall(audit.log, user.id, user.username, "user_created", "user", tostring(res[1].id),
         { username = res[1].username, role = res[1].role }, ngx.var.remote_addr)
 
+    if audit_ok then
+        db.commit()
+    else
+        -- Audit failed, but don't block the operation - commit user creation
+        db.commit()
+        ngx.log(ngx.WARN, "audit log failed for user_created, but user was created")
+    end
+
+    invalidate_auth_cache()
     json.respond(201, { user = res[1] })
     return
 end
@@ -223,17 +243,23 @@ if method == "PUT" and user_id then
                 " WHERE id = $" .. idx ..
                 " RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, updated_at"
 
-    local res, err = db.query(sql, unpack(vals))
+    -- Use transaction: UPDATE user + audit log
+    db.begin()
+
+    local res, upd_err = db.query(sql, unpack(vals))
 
     if not res or #res == 0 then
+        db.rollback()
         json.respond(404, { error = "User not found" })
         return
     end
 
-    -- Audit log
+    -- Audit log (best-effort)
     local audit = require "audit"
-    audit.log(user.id, user.username, "user_updated", "user", user_id, body, ngx.var.remote_addr)
+    pcall(audit.log, user.id, user.username, "user_updated", "user", user_id, body, ngx.var.remote_addr)
 
+    db.commit()
+    invalidate_auth_cache()
     json.respond(200, { user = res[1] })
     return
 end
@@ -246,21 +272,27 @@ if method == "DELETE" and user_id then
         return
     end
 
-    local res, err = db.query(
+    -- Use transaction: DELETE user + audit log
+    db.begin()
+
+    local res, del_err = db.query(
         "DELETE FROM taguato.users WHERE id = $1 RETURNING id, username",
         user_id
     )
 
     if not res or #res == 0 then
+        db.rollback()
         json.respond(404, { error = "User not found" })
         return
     end
 
-    -- Audit log
+    -- Audit log (best-effort)
     local audit = require "audit"
-    audit.log(user.id, user.username, "user_deleted", "user", user_id,
+    pcall(audit.log, user.id, user.username, "user_deleted", "user", user_id,
         { username = res[1].username }, ngx.var.remote_addr)
 
+    db.commit()
+    invalidate_auth_cache()
     json.respond(200, { deleted = res[1] })
     return
 end
