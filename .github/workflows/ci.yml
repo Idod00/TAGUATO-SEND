@@ -1,0 +1,235 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install luacheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y luarocks
+          sudo luarocks install luacheck
+
+      - name: Lint Lua files
+        run: luacheck gateway/lua/
+
+      - name: Install shellcheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          shellcheck --severity=warning -x \
+            install.sh test.sh db/seed-admin.sh scripts/*.sh
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build gateway image
+        run: docker build -t taguato-gateway:test ./gateway
+
+      - name: Verify gateway starts
+        run: |
+          docker run -d --name gw-test \
+            -e AUTHENTICATION_API_KEY=test_key \
+            -e PG_HOST=localhost \
+            -e REDIS_HOST=localhost \
+            taguato-gateway:test
+
+          # Give it a moment to initialize
+          sleep 3
+
+          # Check if container is still running (didn't crash on startup)
+          if docker ps --filter name=gw-test --filter status=running | grep -q gw-test; then
+            echo "Gateway container started successfully"
+          else
+            echo "Gateway container failed to start"
+            docker logs gw-test
+            exit 1
+          fi
+
+          docker stop gw-test && docker rm gw-test
+
+  schema:
+    name: Schema Validation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: taguato
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: evolution
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U taguato -d evolution"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load schema
+        env:
+          PGPASSWORD: test_password
+        run: |
+          psql -h localhost -U taguato -d evolution -f db/init.sql
+          echo "Schema loaded successfully"
+
+      - name: Verify tables exist
+        env:
+          PGPASSWORD: test_password
+        run: |
+          TABLES=$(psql -h localhost -U taguato -d evolution -t -c \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'taguato'")
+          TABLES=$(echo "$TABLES" | tr -d '[:space:]')
+          echo "Found $TABLES tables in taguato schema"
+          if [ "$TABLES" -lt 10 ]; then
+            echo "ERROR: Expected at least 10 tables, found $TABLES"
+            exit 1
+          fi
+          echo "Schema validation passed"
+
+      - name: Run seed-admin.sh
+        env:
+          PGPASSWORD: test_password
+        run: |
+          # Simulate what Docker entrypoint does
+          export ADMIN_USERNAME=admin
+          export ADMIN_PASSWORD=test_admin_pass
+          export POSTGRES_USER=taguato
+          export POSTGRES_DB=evolution
+          bash db/seed-admin.sh
+          echo "Seed script completed successfully"
+
+      - name: Verify admin user
+        env:
+          PGPASSWORD: test_password
+        run: |
+          ADMIN=$(psql -h localhost -U taguato -d evolution -t -c \
+            "SELECT username FROM taguato.users WHERE role = 'admin' LIMIT 1")
+          ADMIN=$(echo "$ADMIN" | tr -d '[:space:]')
+          if [ "$ADMIN" = "admin" ]; then
+            echo "Admin user verified: $ADMIN"
+          else
+            echo "ERROR: Admin user not found (got: '$ADMIN')"
+            exit 1
+          fi
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [build, schema]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env for CI
+        run: |
+          cp .env.example .env
+
+          # Generate deterministic test values
+          API_KEY=$(openssl rand -hex 32)
+
+          sed -i "s|CHANGE_ME_GENERATE_A_SECURE_KEY|${API_KEY}|g" .env
+          sed -i "s|CHANGE_ME_USE_STRONG_PASSWORD_FOR_ADMIN|ci_admin_pass_123|g" .env
+          sed -i "s|POSTGRES_PASSWORD=CHANGE_ME_USE_STRONG_PASSWORD|POSTGRES_PASSWORD=ci_pg_pass_456|g" .env
+          sed -i "s|taguato:CHANGE_ME_USE_STRONG_PASSWORD@|taguato:ci_pg_pass_456@|g" .env
+          sed -i "s|CHANGE_ME_REDIS_PASSWORD|ci_redis_pass_789|g" .env
+
+          echo "Generated .env for CI"
+
+      - name: Start services
+        run: docker compose up -d --build
+
+      - name: Wait for all services healthy
+        timeout-minutes: 5
+        run: |
+          echo "Waiting for services to be healthy..."
+          for i in $(seq 1 60); do
+            # Check PostgreSQL
+            PG_OK=$(docker inspect --format='{{.State.Health.Status}}' taguato-postgres 2>/dev/null || echo "missing")
+            # Check Redis
+            REDIS_OK=$(docker inspect --format='{{.State.Health.Status}}' taguato-redis 2>/dev/null || echo "missing")
+            # Check Gateway
+            GW_OK=$(docker inspect --format='{{.State.Health.Status}}' taguato-gateway 2>/dev/null || echo "missing")
+
+            echo "  [$i/60] postgres=$PG_OK redis=$REDIS_OK gateway=$GW_OK"
+
+            if [ "$PG_OK" = "healthy" ] && [ "$REDIS_OK" = "healthy" ] && [ "$GW_OK" = "healthy" ]; then
+              echo "All services healthy!"
+              break
+            fi
+
+            if [ "$i" -eq 60 ]; then
+              echo "ERROR: Timeout waiting for services"
+              docker compose ps
+              docker compose logs --tail=50
+              exit 1
+            fi
+
+            sleep 5
+          done
+
+          # Extra wait for DB init scripts to complete
+          sleep 5
+
+      - name: Extract admin token
+        id: admin-token
+        run: |
+          TOKEN=$(docker compose logs taguato-postgres 2>/dev/null | grep "API Token:" | tail -1 | sed 's/.*API Token: //' | tr -d '[:space:]')
+          if [ -z "$TOKEN" ]; then
+            echo "ERROR: Could not extract admin token from postgres logs"
+            docker compose logs taguato-postgres --tail=30
+            exit 1
+          fi
+          echo "Admin token extracted (${TOKEN:0:8}...)"
+          echo "ADMIN_TOKEN=$TOKEN" >> "$GITHUB_OUTPUT"
+
+      - name: Run integration tests
+        env:
+          ADMIN_TOKEN: ${{ steps.admin-token.outputs.ADMIN_TOKEN }}
+        run: |
+          # Override the hardcoded token in test.sh with the real one
+          sed -i "s|^ADMIN_TOKEN=.*|ADMIN_TOKEN=\"${ADMIN_TOKEN}\"|" test.sh
+          chmod +x test.sh
+          bash test.sh
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          mkdir -p ci-logs
+          docker compose logs > ci-logs/all-services.log 2>&1
+          docker compose ps > ci-logs/services-status.txt 2>&1
+          docker compose logs taguato-gateway > ci-logs/gateway.log 2>&1
+          docker compose logs taguato-postgres > ci-logs/postgres.log 2>&1
+          docker compose logs taguato-redis > ci-logs/redis.log 2>&1
+          docker compose logs taguato-api > ci-logs/api.log 2>&1 || true
+
+      - name: Upload logs artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          path: ci-logs/
+          retention-days: 7
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans
