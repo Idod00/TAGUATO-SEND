@@ -13,10 +13,11 @@
 local _M = {}
 
 -- Delete rows in batches to avoid long-running locks.
+-- SQL must include "LIMIT $BATCH" placeholder inside the subquery.
 -- Returns total number of rows deleted.
 local function batched_delete(db, log, sql, batch_size, table_name)
     local total_deleted = 0
-    local batch_sql = sql .. " LIMIT " .. batch_size
+    local batch_sql = sql:gsub("%$BATCH", tostring(batch_size))
 
     for _ = 1, 100 do -- safety cap: max 100 iterations (500K rows)
         local res, err = db.query(batch_sql)
@@ -87,6 +88,7 @@ function _M.cleanup_tables()
             SELECT id FROM taguato.message_logs
             WHERE created_at < NOW() - INTERVAL '90 days'
             ORDER BY id ASC
+            LIMIT $BATCH
           )]],
         batch_size, "message_logs"
     )
@@ -101,6 +103,7 @@ function _M.cleanup_tables()
             SELECT id FROM taguato.audit_log
             WHERE created_at < NOW() - INTERVAL '180 days'
             ORDER BY id ASC
+            LIMIT $BATCH
           )]],
         batch_size, "audit_log"
     )
@@ -115,6 +118,7 @@ function _M.cleanup_tables()
             SELECT id FROM taguato.reconnect_log
             WHERE created_at < NOW() - INTERVAL '90 days'
             ORDER BY id ASC
+            LIMIT $BATCH
           )]],
         batch_size, "reconnect_log"
     )
@@ -129,6 +133,7 @@ function _M.cleanup_tables()
             SELECT id FROM taguato.uptime_checks
             WHERE checked_at < NOW() - INTERVAL '30 days'
             ORDER BY id ASC
+            LIMIT $BATCH
           )]],
         batch_size, "uptime_checks"
     )
@@ -143,6 +148,7 @@ function _M.cleanup_tables()
             SELECT id FROM taguato.sessions
             WHERE is_active = false AND created_at < NOW() - INTERVAL '7 days'
             ORDER BY id ASC
+            LIMIT $BATCH
           )]],
         batch_size, "sessions"
     )
