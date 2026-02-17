@@ -15,6 +15,8 @@ services:
       - REDIS_HOST=taguato-redis
       - REDIS_PORT=6379
       - BACKUP_INTERVAL=${BACKUP_INTERVAL:-86400}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - RATE_LIMIT_FAIL_MODE=${RATE_LIMIT_FAIL_MODE:-open}
     volumes:
       - ./backups:/backups
     healthcheck:
@@ -22,9 +24,17 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 512M
     depends_on:
       taguato-api:
-        condition: service_started
+        condition: service_healthy
       taguato-postgres:
         condition: service_healthy
     networks:
@@ -40,6 +50,19 @@ services:
     volumes:
       - evolution_instances:/evolution/instances
       - evolution_store:/evolution/store
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
     depends_on:
       taguato-postgres:
         condition: service_healthy
@@ -52,20 +75,27 @@ services:
     image: postgres:15-alpine
     container_name: taguato-postgres
     restart: unless-stopped
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    # Port NOT exposed to host — only accessible within taguato-network
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-taguato}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taguato_secret}
       POSTGRES_DB: ${POSTGRES_DB:-evolution}
-      POSTGRES_HOST_AUTH_METHOD: md5
-      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./db/seed-admin.sh:/docker-entrypoint-initdb.d/02-seed-admin.sh:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taguato} -d ${POSTGRES_DB:-evolution}"]
       interval: 10s
@@ -78,10 +108,17 @@ services:
     image: redis:7-alpine
     container_name: taguato-redis
     restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    # Port NOT exposed to host — only accessible within taguato-network
     volumes:
       - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

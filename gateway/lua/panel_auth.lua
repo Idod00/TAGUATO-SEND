@@ -231,7 +231,7 @@ if method == "POST" and uri == "/api/auth/change-password" then
     -- Update password and clear the flag
     local upd, err = db.query(
         [[UPDATE taguato.users
-          SET password_hash = crypt($1, gen_salt('bf')),
+          SET password_hash = crypt($1, gen_salt('bf', 12)),
               must_change_password = false,
               updated_at = NOW()
           WHERE id = $2]],
@@ -242,6 +242,15 @@ if method == "POST" and uri == "/api/auth/change-password" then
         json.respond(500, { error = "Failed to update password" })
         return
     end
+
+    -- Invalidate all other sessions for this user (keep current session active)
+    local current_token_hash = ngx.md5(token)
+    db.query(
+        [[UPDATE taguato.sessions
+          SET is_active = false
+          WHERE user_id = $1 AND token_hash != $2 AND is_active = true]],
+        user_id, current_token_hash
+    )
 
     json.respond(200, { message = "Password changed successfully" })
     return

@@ -1,22 +1,22 @@
 // API Client for TAGUATO-SEND Panel
 const API = (() => {
   function getToken() {
-    return localStorage.getItem('taguato_token');
+    return sessionStorage.getItem('taguato_token');
   }
 
   function setSession(token, user) {
-    localStorage.setItem('taguato_token', token);
-    localStorage.setItem('taguato_user', JSON.stringify(user));
+    sessionStorage.setItem('taguato_token', token);
+    sessionStorage.setItem('taguato_user', JSON.stringify(user));
   }
 
   function clearSession() {
-    localStorage.removeItem('taguato_token');
-    localStorage.removeItem('taguato_user');
+    sessionStorage.removeItem('taguato_token');
+    sessionStorage.removeItem('taguato_user');
   }
 
   function getStoredUser() {
     try {
-      return JSON.parse(localStorage.getItem('taguato_user'));
+      return JSON.parse(sessionStorage.getItem('taguato_user'));
     } catch {
       return null;
     }

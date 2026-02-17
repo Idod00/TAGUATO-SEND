@@ -18,13 +18,25 @@ function _M.run()
     -- Create backups directory if not exists
     os.execute("mkdir -p /backups")
 
-    -- Run pg_dump
+    -- Write .pgpass file for secure password passing (not visible in ps aux)
+    local pgpass_file = "/tmp/.pgpass_backup"
+    local f = io.open(pgpass_file, "w")
+    if f then
+        f:write(string.format("%s:%s:%s:%s:%s\n", pg_host, pg_port, pg_db, pg_user, pg_pass))
+        f:close()
+        os.execute("chmod 600 " .. pgpass_file)
+    end
+
+    -- Run pg_dump using .pgpass for authentication
     local cmd = string.format(
-        "PGPASSWORD='%s' pg_dump -h %s -p %s -U %s -d %s 2>/dev/null | gzip > %s",
-        pg_pass, pg_host, pg_port, pg_user, pg_db, backup_file
+        "PGPASSFILE='%s' pg_dump -h %s -p %s -U %s -d %s 2>/dev/null | gzip > %s",
+        pgpass_file, pg_host, pg_port, pg_user, pg_db, backup_file
     )
 
     local ok = os.execute(cmd)
+
+    -- Clean up .pgpass file
+    os.remove(pgpass_file)
 
     if ok then
         log.info("backup_worker", "auto backup created", { file = backup_file })

@@ -8,15 +8,23 @@ set -e
 ADMIN_USER="${ADMIN_USERNAME:-admin}"
 ADMIN_PASS="${ADMIN_PASSWORD:-admin}"
 
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
-    DO \$\$
+# Use psql variables (-v) to safely pass values without SQL injection.
+# The :'var' syntax in psql safely quotes string literals.
+psql -v ON_ERROR_STOP=1 \
+     -v admin_user="$ADMIN_USER" \
+     -v admin_pass="$ADMIN_PASS" \
+     --username "$POSTGRES_USER" \
+     --dbname "$POSTGRES_DB" <<-'EOSQL'
+    DO $$
     DECLARE
         v_token TEXT := encode(gen_random_bytes(32), 'hex');
+        v_user TEXT := :'admin_user';
+        v_pass TEXT := :'admin_pass';
     BEGIN
         INSERT INTO taguato.users (username, password_hash, role, api_token, max_instances, is_active)
         VALUES (
-            '${ADMIN_USER}',
-            crypt('${ADMIN_PASS}', gen_salt('bf')),
+            v_user,
+            crypt(v_pass, gen_salt('bf', 12)),
             'admin',
             v_token,
             -1,
@@ -26,9 +34,9 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
 
         RAISE NOTICE '============================================';
         RAISE NOTICE 'TAGUATO-SEND Admin User Created';
-        RAISE NOTICE 'Username: ${ADMIN_USER}';
+        RAISE NOTICE 'Username: %', v_user;
         RAISE NOTICE 'API Token: %', v_token;
         RAISE NOTICE 'Save this token! It is your admin API key.';
         RAISE NOTICE '============================================';
-    END \$\$;
+    END $$;
 EOSQL
