@@ -1,8 +1,79 @@
 -- Scheduled messages worker
 -- Runs on a timer, picks up pending messages and sends them
 -- Idempotent: checks message_logs before sending to prevent duplicates on crash recovery
+-- Features: retry with exponential backoff, batch processing
 
 local _M = {}
+
+-- Send a single message with retry logic (max 3 attempts, exponential backoff)
+local function send_with_retry(http, api_key, instance_name, msg_type, content, number)
+    local cjson = require "cjson"
+    local max_retries = 3
+    local delay = 1 -- seconds
+
+    for attempt = 1, max_retries do
+        local httpc = http.new()
+        httpc:set_timeout(5000)
+
+        local send_ok = false
+        local send_err = nil
+
+        if msg_type == "text" then
+            local res, req_err = httpc:request_uri(
+                "http://taguato-api:8080/message/sendText/" .. instance_name,
+                {
+                    method = "POST",
+                    headers = {
+                        ["apikey"] = api_key,
+                        ["Content-Type"] = "application/json",
+                    },
+                    body = cjson.encode({ number = number, text = content }),
+                }
+            )
+            if res and res.status >= 200 and res.status < 300 then
+                return true, nil
+            end
+            send_err = req_err or (res and "status " .. res.status) or "unknown error"
+        else
+            local media_ok, media_body = pcall(cjson.decode, content)
+            if media_ok and type(media_body) == "table" then
+                media_body.number = number
+                local res, req_err = httpc:request_uri(
+                    "http://taguato-api:8080/message/sendMedia/" .. instance_name,
+                    {
+                        method = "POST",
+                        headers = {
+                            ["apikey"] = api_key,
+                            ["Content-Type"] = "application/json",
+                        },
+                        body = cjson.encode(media_body),
+                    }
+                )
+                if res and res.status >= 200 and res.status < 300 then
+                    return true, nil
+                end
+                send_err = req_err or (res and "status " .. res.status) or "unknown error"
+            else
+                -- Invalid media JSON — no point retrying
+                return false, "invalid media content JSON"
+            end
+        end
+
+        -- Don't retry on 4xx (client errors) — only retry on 5xx / network errors
+        if send_err and send_err:match("status 4%d%d") then
+            return false, send_err
+        end
+
+        if attempt < max_retries then
+            ngx.sleep(delay)
+            delay = delay * 2 -- exponential backoff: 1s, 2s, 4s
+        else
+            return false, send_err .. " (after " .. max_retries .. " attempts)"
+        end
+    end
+
+    return false, "max retries exceeded"
+end
 
 function _M.check()
     local http = require "resty.http"
@@ -16,18 +87,20 @@ function _M.check()
         return
     end
 
-    -- Fetch pending messages that are due (includes 'processing' for crash recovery)
+    -- Fetch pending messages that are due (includes 'processing' for crash recovery, batch of 20)
     local pending, err = db.query(
         [[SELECT id, user_id, instance_name, message_type, message_content, recipients, scheduled_at
           FROM taguato.scheduled_messages
           WHERE status IN ('pending', 'processing') AND scheduled_at <= NOW()
           ORDER BY scheduled_at ASC
-          LIMIT 5]]
+          LIMIT 20]]
     )
 
     if not pending or #pending == 0 then
         return
     end
+
+    log.info("scheduled_worker", "processing batch", { count = #pending })
 
     for _, msg in ipairs(pending) do
         -- Mark as processing
@@ -70,58 +143,13 @@ function _M.check()
                 goto next_recipient
             end
 
-            local httpc = http.new()
-            httpc:set_timeout(10000)
-
-            local send_ok = false
-            local send_err = nil
-
-            if msg.message_type == "text" then
-                local res, req_err = httpc:request_uri(
-                    "http://taguato-api:8080/message/sendText/" .. msg.instance_name,
-                    {
-                        method = "POST",
-                        headers = {
-                            ["apikey"] = api_key,
-                            ["Content-Type"] = "application/json",
-                        },
-                        body = cjson.encode({ number = number, text = msg.message_content }),
-                    }
-                )
-                if res and res.status >= 200 and res.status < 300 then
-                    send_ok = true
-                else
-                    send_err = req_err or (res and "status " .. res.status) or "unknown error"
-                end
-            else
-                -- Media message: message_content is JSON with media details
-                local media_ok, media_body = pcall(cjson.decode, msg.message_content)
-                if media_ok and type(media_body) == "table" then
-                    media_body.number = number
-                    local res, req_err = httpc:request_uri(
-                        "http://taguato-api:8080/message/sendMedia/" .. msg.instance_name,
-                        {
-                            method = "POST",
-                            headers = {
-                                ["apikey"] = api_key,
-                                ["Content-Type"] = "application/json",
-                            },
-                            body = cjson.encode(media_body),
-                        }
-                    )
-                    if res and res.status >= 200 and res.status < 300 then
-                        send_ok = true
-                    else
-                        send_err = req_err or (res and "status " .. res.status) or "unknown error"
-                    end
-                else
-                    send_err = "invalid media content JSON"
-                end
-            end
+            local send_ok, send_err = send_with_retry(
+                http, api_key, msg.instance_name,
+                msg.message_type, msg.message_content, number
+            )
 
             if send_ok then
                 sent_count = sent_count + 1
-                -- Log to message_logs with scheduled_message_id for idempotency
                 db.query(
                     [[INSERT INTO taguato.message_logs (user_id, instance_name, phone_number, message_type, status, scheduled_message_id)
                       VALUES ($1, $2, $3, $4, 'sent', $5)]],

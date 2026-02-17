@@ -112,29 +112,33 @@ function _M.check()
     local redis_time = math.floor((ngx.now() - t0) * 1000)
     results[4] = { name = "Redis", status = redis_status, response_time = redis_time }
 
-    -- Insert results into database
-    local pg2 = pgmoon.new(pg_config)
-    local ok2, err2 = pg2:connect()
-    if not ok2 then
-        log.err("uptime_worker", "cannot connect to DB for insert", { error = err2 })
-        return
+    -- Insert results into database (reuse the existing pg connection if still alive, else open new)
+    local insert_pg = pg
+    local need_new_conn = not pg_ok
+    if need_new_conn then
+        insert_pg = pgmoon.new(pg_config)
+        local ok2, err2 = insert_pg:connect()
+        if not ok2 then
+            log.err("uptime_worker", "cannot connect to DB for insert", { error = err2 })
+            return
+        end
     end
 
     for _, r in ipairs(results) do
         local sql = "INSERT INTO taguato.uptime_checks (service_name, status, response_time) VALUES ("
-            .. pg2:escape_literal(r.name) .. ", "
-            .. pg2:escape_literal(r.status) .. ", "
-            .. tostring(r.response_time) .. ")"
-        local res, qerr = pg2:query(sql)
+            .. insert_pg:escape_literal(r.name) .. ", "
+            .. insert_pg:escape_literal(r.status) .. ", "
+            .. tostring(r.response_time >= 0 and r.response_time or 0) .. ")"
+        local res, qerr = insert_pg:query(sql)
         if not res then
             log.err("uptime_worker", "insert failed", { error = qerr })
         end
     end
 
     -- Cleanup: delete records older than 90 days
-    pg2:query("DELETE FROM taguato.uptime_checks WHERE checked_at < NOW() - INTERVAL '90 days'")
+    insert_pg:query("DELETE FROM taguato.uptime_checks WHERE checked_at < NOW() - INTERVAL '90 days'")
 
-    pg2:keepalive(10000, 10)
+    insert_pg:keepalive(10000, 10)
     log.info("uptime_worker", "check completed, 4 services recorded")
 end
 

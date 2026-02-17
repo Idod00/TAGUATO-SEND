@@ -12,6 +12,35 @@
 
 local _M = {}
 
+-- Delete rows in batches to avoid long-running locks.
+-- Returns total number of rows deleted.
+local function batched_delete(db, log, sql, batch_size, table_name)
+    local total_deleted = 0
+    local batch_sql = sql .. " LIMIT " .. batch_size
+
+    for _ = 1, 100 do -- safety cap: max 100 iterations (500K rows)
+        local res, err = db.query(batch_sql)
+        if not res then
+            log.err("cleanup_worker", "batched delete failed", { table = table_name, error = err })
+            break
+        end
+
+        -- pgmoon returns affected_rows for DELETE without RETURNING
+        -- With RETURNING, res is a table of rows
+        local deleted = (type(res) == "table") and #res or 0
+        if deleted == 0 then
+            break
+        end
+
+        total_deleted = total_deleted + deleted
+
+        -- Yield briefly between batches to let other queries through
+        ngx.sleep(0.05)
+    end
+
+    return total_deleted
+end
+
 -- Lightweight tasks: run every cycle (5 min)
 function _M.check()
     local db = require "init"
@@ -44,54 +73,78 @@ function _M.check()
 end
 
 -- Heavy tasks: run once per cycle (every 6 hours via separate timer)
+-- Uses batched deletes (5000 rows at a time) to avoid long table locks.
 function _M.cleanup_tables()
     local db = require "init"
     local log = require "log"
 
+    local batch_size = 5000
+
     -- 3. Delete old message_logs (>90 days)
-    local ml, err = db.query(
+    local ml_count = batched_delete(db, log,
         [[DELETE FROM taguato.message_logs
-          WHERE created_at < NOW() - INTERVAL '90 days'
-          RETURNING id]]
+          WHERE id IN (
+            SELECT id FROM taguato.message_logs
+            WHERE created_at < NOW() - INTERVAL '90 days'
+            ORDER BY id ASC
+          )]],
+        batch_size, "message_logs"
     )
-    if ml and #ml > 0 then
-        log.info("cleanup_worker", "purged old message_logs", { count = #ml })
+    if ml_count > 0 then
+        log.info("cleanup_worker", "purged old message_logs", { count = ml_count })
     end
 
     -- 4. Delete old audit_log (>180 days)
-    local al, err2 = db.query(
+    local al_count = batched_delete(db, log,
         [[DELETE FROM taguato.audit_log
-          WHERE created_at < NOW() - INTERVAL '180 days'
-          RETURNING id]]
+          WHERE id IN (
+            SELECT id FROM taguato.audit_log
+            WHERE created_at < NOW() - INTERVAL '180 days'
+            ORDER BY id ASC
+          )]],
+        batch_size, "audit_log"
     )
-    if al and #al > 0 then
-        log.info("cleanup_worker", "purged old audit_log", { count = #al })
+    if al_count > 0 then
+        log.info("cleanup_worker", "purged old audit_log", { count = al_count })
     end
 
     -- 5. Delete old reconnect_log (>90 days)
-    local rl, err3 = db.query(
+    local rl_count = batched_delete(db, log,
         [[DELETE FROM taguato.reconnect_log
-          WHERE created_at < NOW() - INTERVAL '90 days'
-          RETURNING id]]
+          WHERE id IN (
+            SELECT id FROM taguato.reconnect_log
+            WHERE created_at < NOW() - INTERVAL '90 days'
+            ORDER BY id ASC
+          )]],
+        batch_size, "reconnect_log"
     )
-    if rl and #rl > 0 then
-        log.info("cleanup_worker", "purged old reconnect_log", { count = #rl })
+    if rl_count > 0 then
+        log.info("cleanup_worker", "purged old reconnect_log", { count = rl_count })
     end
 
     -- 6. Delete old uptime_checks (>30 days)
-    local uc, err4 = db.query(
+    local uc_count = batched_delete(db, log,
         [[DELETE FROM taguato.uptime_checks
-          WHERE checked_at < NOW() - INTERVAL '30 days'
-          RETURNING id]]
+          WHERE id IN (
+            SELECT id FROM taguato.uptime_checks
+            WHERE checked_at < NOW() - INTERVAL '30 days'
+            ORDER BY id ASC
+          )]],
+        batch_size, "uptime_checks"
     )
-    if uc and #uc > 0 then
-        log.info("cleanup_worker", "purged old uptime_checks", { count = #uc })
+    if uc_count > 0 then
+        log.info("cleanup_worker", "purged old uptime_checks", { count = uc_count })
     end
 
     -- Also clean inactive sessions older than 7 days
-    db.query(
+    batched_delete(db, log,
         [[DELETE FROM taguato.sessions
-          WHERE is_active = false AND created_at < NOW() - INTERVAL '7 days']]
+          WHERE id IN (
+            SELECT id FROM taguato.sessions
+            WHERE is_active = false AND created_at < NOW() - INTERVAL '7 days'
+            ORDER BY id ASC
+          )]],
+        batch_size, "sessions"
     )
 end
 
@@ -150,18 +203,31 @@ function _M.retry_webhooks()
             )
             log.info("cleanup_worker", "webhook sync succeeded", { webhook_id = wh.id, instance = wh.instance_name })
         else
-            -- Failed: increment retry count
+            -- Failed: increment retry count, deactivate if max retries reached
             local err_msg = req_err or (res and "status " .. res.status) or "unknown"
-            db.query(
-                [[UPDATE taguato.user_webhooks
-                  SET retry_count = retry_count + 1, last_error = $1, updated_at = NOW()
-                  WHERE id = $2]],
-                err_msg, wh.id
-            )
-            log.warn("cleanup_worker", "webhook sync failed", {
-                webhook_id = wh.id, instance = wh.instance_name,
-                retry = wh.retry_count + 1, error = err_msg
-            })
+            local new_retry = (wh.retry_count or 0) + 1
+            if new_retry >= 3 then
+                db.query(
+                    [[UPDATE taguato.user_webhooks
+                      SET retry_count = $1, last_error = $2, needs_sync = false, is_active = false, updated_at = NOW()
+                      WHERE id = $3]],
+                    new_retry, err_msg .. " (deactivated after max retries)", wh.id
+                )
+                log.warn("cleanup_worker", "webhook deactivated after max retries", {
+                    webhook_id = wh.id, instance = wh.instance_name
+                })
+            else
+                db.query(
+                    [[UPDATE taguato.user_webhooks
+                      SET retry_count = retry_count + 1, last_error = $1, updated_at = NOW()
+                      WHERE id = $2]],
+                    err_msg, wh.id
+                )
+                log.warn("cleanup_worker", "webhook sync failed", {
+                    webhook_id = wh.id, instance = wh.instance_name,
+                    retry = new_retry, error = err_msg
+                })
+            end
         end
     end
 end
