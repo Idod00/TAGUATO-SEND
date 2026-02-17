@@ -23,7 +23,7 @@ assert_contains "Has overall_status" "overall_status" "$BODY"
 assert_json_count "Has 4 services" ".services" 4 "$BODY"
 assert_contains "Has uptime field" "uptime" "$BODY"
 
-# --- X-Cache header (warm cache first, then check) ---
-do_get "$BASE/api/status" > /dev/null
-HEADERS=$(get_headers "$BASE/api/status")
+# --- X-Cache header ---
+# Note: /api/status rejects HEAD (405), so get headers from a GET response
+HEADERS=$(curl -s -D - -o /dev/null "$BASE/api/status")
 assert_header "X-Cache header present on /api/status" "X-Cache" "" "$HEADERS"
