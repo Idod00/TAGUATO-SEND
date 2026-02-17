@@ -7,6 +7,14 @@ local db = require "init"
 local json = require "json"
 local validate = require "validate"
 
+local function sha256_hex(input)
+    local sha256 = require "resty.sha256"
+    local str = require "resty.string"
+    local sha = sha256:new()
+    sha:update(input)
+    return str.to_hex(sha:final())
+end
+
 local method = ngx.req.get_method()
 local uri = ngx.var.uri
 
@@ -88,7 +96,7 @@ if method == "POST" and uri == "/api/auth/login" then
     -- Create session record (24h TTL)
     local ip = ngx.var.remote_addr or "unknown"
     local ua = ngx.req.get_headers()["User-Agent"] or "unknown"
-    local token_hash = ngx.md5(user.api_token)
+    local token_hash = sha256_hex(user.api_token)
     db.query(
         [[INSERT INTO taguato.sessions (user_id, token_hash, ip_address, user_agent, expires_at)
           VALUES ($1, $2, $3, $4, NOW() + INTERVAL '24 hours')]],
@@ -136,7 +144,7 @@ if method == "GET" and uri == "/api/auth/me" then
     end
 
     -- Check session expiration (panel sessions only)
-    local token_hash = ngx.md5(token)
+    local token_hash = sha256_hex(token)
     local sess = db.query(
         [[SELECT id, expires_at FROM taguato.sessions
           WHERE token_hash = $1 AND user_id = $2 AND is_active = true

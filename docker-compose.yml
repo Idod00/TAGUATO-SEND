@@ -14,6 +14,7 @@ services:
       - PG_PASSWORD=${POSTGRES_PASSWORD:-taguato_secret}
       - REDIS_HOST=taguato-redis
       - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-taguato_redis_secret}
       - BACKUP_INTERVAL=${BACKUP_INTERVAL:-86400}
     volumes:
       - ./backups:/backups
@@ -52,8 +53,9 @@ services:
     image: postgres:15-alpine
     container_name: taguato-postgres
     restart: unless-stopped
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    # ports:
+    #   - "${POSTGRES_PORT:-5432}:5432"
+    # Uncomment ports above for external debug access
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-taguato}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taguato_secret}
@@ -78,12 +80,14 @@ services:
     image: redis:7-alpine
     container_name: taguato-redis
     restart: unless-stopped
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD:-taguato_redis_secret}
+    # ports:
+    #   - "${REDIS_PORT:-6379}:6379"
+    # Uncomment ports above for external debug access
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-taguato_redis_secret}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

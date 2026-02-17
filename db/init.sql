@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS taguato.user_instances (
     user_id INT REFERENCES taguato.users(id) ON DELETE CASCADE,
     instance_name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE(user_id, instance_name)
+    UNIQUE(user_id, instance_name),
+    UNIQUE(instance_name)
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_token ON taguato.users(api_token);

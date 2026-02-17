@@ -77,4 +77,18 @@ function _M.validate_username(val)
     return true
 end
 
+-- Validate instance name: 1-100 chars, alphanumeric + underscore + hyphen, must start with alphanumeric
+function _M.validate_instance_name(val)
+    if not val or type(val) ~= "string" then
+        return false, "Instance name is required"
+    end
+    if #val < 1 or #val > 100 then
+        return false, "Instance name must be between 1 and 100 characters"
+    end
+    if not val:match("^[a-zA-Z0-9][a-zA-Z0-9_%-]*$") then
+        return false, "Instance name must start with a letter or number and contain only letters, numbers, underscores and hyphens"
+    end
+    return true
+end
+
 return _M

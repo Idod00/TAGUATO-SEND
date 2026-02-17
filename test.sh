@@ -5,7 +5,11 @@
 set -uo pipefail
 
 BASE="http://localhost"
-ADMIN_TOKEN="16c868b386d9265b849b4e8bb738db31cd340d514e6af152fc02d75c182c79e8"
+ADMIN_TOKEN="${ADMIN_TOKEN:-$(grep '^ADMIN_TOKEN=' .env 2>/dev/null | cut -d= -f2)}"
+if [ -z "$ADMIN_TOKEN" ]; then
+    echo "ERROR: ADMIN_TOKEN not set. Export it or add ADMIN_TOKEN=<token> to .env"
+    exit 1
+fi
 PASS=0
 FAIL=0
 TOTAL=0

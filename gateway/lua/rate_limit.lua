@@ -8,15 +8,9 @@ function _M.check(user_id, limit)
         return true -- no limit configured
     end
 
-    local redis = require "resty.redis"
-    local red = redis:new()
-    red:set_timeout(1000)
-
-    local redis_host = os.getenv("REDIS_HOST") or "taguato-redis"
-    local redis_port = tonumber(os.getenv("REDIS_PORT")) or 6379
-
-    local ok, err = red:connect(redis_host, redis_port)
-    if not ok then
+    local db = require "init"
+    local red, err = db.get_redis(1000)
+    if not red then
         ngx.log(ngx.ERR, "rate_limit: redis connect failed: ", err)
         return true -- fail open on redis error
     end

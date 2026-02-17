@@ -102,18 +102,6 @@ end
 
 -- ============ INSTANCE CREATE ============
 if uri == "/instance/create" and method == "POST" then
-    if user.max_instances > 0 then
-        local count = count_user_instances()
-        if count >= user.max_instances then
-            json.respond(403, {
-                error = "Instance limit reached",
-                current = count,
-                max = user.max_instances
-            })
-            return
-        end
-    end
-
     local body, err = json.read_body()
     if not body or not body.instanceName then
         json.respond(400, { error = "instanceName is required" })
@@ -122,23 +110,40 @@ if uri == "/instance/create" and method == "POST" then
 
     local instance_name = body.instanceName
 
-    -- Check if instance name is already taken
-    local existing = db.query(
-        "SELECT user_id FROM taguato.user_instances WHERE instance_name = $1",
-        instance_name
-    )
-    if existing and #existing > 0 then
-        json.respond(409, { error = "Instance name already in use" })
+    -- Validate instance name format
+    local validate = require "validate"
+    local name_ok, name_err = validate.validate_instance_name(instance_name)
+    if not name_ok then
+        json.respond(400, { error = name_err })
         return
     end
 
-    -- Register ownership
+    -- Atomic insert: check limit + uniqueness in one query
     local ins_res, ins_err = db.query(
-        "INSERT INTO taguato.user_instances (user_id, instance_name) VALUES ($1, $2)",
-        user.id, instance_name
+        [[INSERT INTO taguato.user_instances (user_id, instance_name)
+          SELECT $1, $2
+          WHERE (SELECT COUNT(*) FROM taguato.user_instances WHERE user_id = $1) < $3
+          ON CONFLICT (instance_name) DO NOTHING
+          RETURNING id]],
+        user.id, instance_name, user.max_instances
     )
-    if not ins_res then
-        json.respond(500, { error = "Failed to register instance" })
+
+    if not ins_res or #ins_res == 0 then
+        -- Determine if it was a limit issue or a duplicate name
+        local existing = db.query(
+            "SELECT user_id FROM taguato.user_instances WHERE instance_name = $1",
+            instance_name
+        )
+        if existing and #existing > 0 then
+            json.respond(409, { error = "Instance name already in use" })
+        else
+            local count = count_user_instances()
+            json.respond(403, {
+                error = "Instance limit reached",
+                current = count,
+                max = user.max_instances
+            })
+        end
         return
     end
 

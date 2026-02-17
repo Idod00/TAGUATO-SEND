@@ -17,6 +17,7 @@ Registro de todas las features y cambios implementados. Cada archivo documenta u
 | 08 | - | Audit log + Backup admin + Reconnect worker (Batch 4) | Completado | [08-batch4-audit-backup-reconnect.md](08-batch4-audit-backup-reconnect.md) |
 | 09 | - | Emoji picker + Format toolbar + Modales (Batch 5) | Completado | [09-batch5-emoji-toolbar-modals.md](09-batch5-emoji-toolbar-modals.md) |
 | 10 | - | Programacion de envios (Scheduled Messages) | Completado | [10-scheduled-messages.md](10-scheduled-messages.md) |
+| 11 | - | Security hardening (6 fixes alta prioridad) | Completado | [11-security-hardening.md](11-security-hardening.md) |
 
 ## Convenciones
 

@@ -40,4 +40,18 @@ return {
             ALTER TABLE taguato.user_webhooks ADD COLUMN IF NOT EXISTS needs_sync BOOLEAN DEFAULT false;
         ]],
     },
+    {
+        version = 4,
+        name = "unique_instance_name",
+        sql = [[
+            ALTER TABLE taguato.user_instances ADD CONSTRAINT uq_instance_name UNIQUE (instance_name);
+        ]],
+    },
+    {
+        version = 5,
+        name = "invalidate_md5_sessions",
+        sql = [[
+            UPDATE taguato.sessions SET is_active = false WHERE is_active = true;
+        ]],
+    },
 }

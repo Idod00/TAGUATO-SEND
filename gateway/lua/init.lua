@@ -75,4 +75,30 @@ function _M.query(sql, ...)
     return res
 end
 
+-- Redis connection helper with auth support
+function _M.get_redis(timeout_ms)
+    local redis = require "resty.redis"
+    local red = redis:new()
+    red:set_timeouts(timeout_ms or 3000, timeout_ms or 3000, timeout_ms or 3000)
+
+    local redis_host = os.getenv("REDIS_HOST") or "taguato-redis"
+    local redis_port = tonumber(os.getenv("REDIS_PORT")) or 6379
+
+    local ok, err = red:connect(redis_host, redis_port)
+    if not ok then
+        return nil, err
+    end
+
+    local password = os.getenv("REDIS_PASSWORD")
+    if password and password ~= "" then
+        local auth_ok, auth_err = red:auth(password)
+        if not auth_ok then
+            red:close()
+            return nil, "Redis auth failed: " .. (auth_err or "unknown")
+        end
+    end
+
+    return red
+end
+
 return _M

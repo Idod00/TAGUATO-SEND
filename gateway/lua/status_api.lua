@@ -21,15 +21,8 @@ if ngx.req.get_method() ~= "GET" then
 end
 
 -- Try Redis cache first
-local redis = require "resty.redis"
-local red = redis:new()
-red:set_timeouts(3000, 3000, 3000)
-local redis_host = os.getenv("REDIS_HOST") or "taguato-redis"
-local redis_port = tonumber(os.getenv("REDIS_PORT")) or 6379
-
-local cache_hit = false
-local ok, err = red:connect(redis_host, redis_port)
-if ok then
+local red, err = db.get_redis(3000)
+if red then
     local cached, _ = red:get("taguato:status:cache")
     if cached and cached ~= ngx.null then
         ngx.header["Content-Type"] = "application/json"
@@ -68,12 +61,10 @@ else
     services[3] = { name = "PostgreSQL", status = "major_outage", response_time = pg_time }
 end
 
--- 4. Redis - connect + PING
-local red2 = redis:new()
-red2:set_timeouts(3000, 3000, 3000)
+-- 4. Redis - connect + auth + PING
 t0 = ngx.now()
-local ok2, err2 = red2:connect(redis_host, redis_port)
-if ok2 then
+local red2, err2 = db.get_redis(3000)
+if red2 then
     local pong, _ = red2:ping()
     local redis_time = math.floor((ngx.now() - t0) * 1000)
     red2:set_keepalive(10000, 10)
@@ -293,10 +284,8 @@ local response_data = {
 }
 
 -- Store in Redis cache (15s TTL), graceful if Redis is down
-local red3 = redis:new()
-red3:set_timeouts(1000, 1000, 1000)
-local ok3, _ = red3:connect(redis_host, redis_port)
-if ok3 then
+local red3, _ = db.get_redis(1000)
+if red3 then
     local json_str = cjson.encode(response_data)
     red3:setex("taguato:status:cache", 15, json_str)
     red3:set_keepalive(10000, 10)

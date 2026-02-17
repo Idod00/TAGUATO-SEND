@@ -78,16 +78,27 @@ function _M.check()
     local pg_time = math.floor((ngx.now() - t0) * 1000)
     results[3] = { name = "PostgreSQL", status = pg_status, response_time = pg_time }
 
-    -- 4. Redis - connect + PING
+    -- 4. Redis - connect + auth + PING
     local redis_lib = require "resty.redis"
     local red = redis_lib:new()
     red:set_timeouts(3000, 3000, 3000)
     local redis_host = os.getenv("REDIS_HOST") or "taguato-redis"
     local redis_port = tonumber(os.getenv("REDIS_PORT")) or 6379
+    local redis_password = os.getenv("REDIS_PASSWORD")
 
     t0 = ngx.now()
     local redis_ok, redis_err = red:connect(redis_host, redis_port)
     local redis_status = "major_outage"
+    if redis_ok then
+        if redis_password and redis_password ~= "" then
+            local auth_ok, auth_err = red:auth(redis_password)
+            if not auth_ok then
+                log.warn("uptime_worker", "Redis auth failed", { error = auth_err })
+                red:close()
+                redis_ok = false
+            end
+        end
+    end
     if redis_ok then
         local pong, _ = red:ping()
         if pong then
@@ -95,6 +106,7 @@ function _M.check()
         end
         red:set_keepalive(10000, 10)
     else
+        if not redis_err then redis_err = "auth or connect failed" end
         log.warn("uptime_worker", "Redis connect failed", { error = redis_err })
     end
     local redis_time = math.floor((ngx.now() - t0) * 1000)
