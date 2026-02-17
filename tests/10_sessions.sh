@@ -23,8 +23,6 @@ BODY=$(do_get "$BASE/admin/sessions" "$ADMIN_TOKEN")
 assert_contains "Admin sessions include username field" "username" "$BODY"
 assert_json_count "Admin sees at least 1 session" ".sessions" 1 "$BODY"
 
-ADMIN_SESSION_ID=$(json_val "$BODY" '.sessions[0].id')
-
 # --- Admin revoke any session ---
 if [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ]; then
     BODY=$(do_delete "$BASE/admin/sessions/$SESSION_ID" "$ADMIN_TOKEN")

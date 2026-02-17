@@ -128,7 +128,7 @@ assert_header() {
 
 skip_test() {
     local desc="$1"
-    local reason="$2"
+    local reason="${2:-}"
     TOTAL=$((TOTAL + 1))
     SKIP=$((SKIP + 1))
     echo -e "  ${YELLOW}SKIP${NC} $desc ($reason)"
@@ -138,7 +138,7 @@ skip_test() {
 
 do_get() {
     local url="$1"
-    local apikey="$2"
+    local apikey="${2:-}"
     if [ -n "$apikey" ]; then
         curl -s -H "apikey: $apikey" "$url"
     else
@@ -149,7 +149,7 @@ do_get() {
 do_post() {
     local url="$1"
     local json_body="$2"
-    local apikey="$3"
+    local apikey="${3:-}"
     if [ -n "$apikey" ]; then
         curl -s -X POST "$url" -H "apikey: $apikey" -H "Content-Type: application/json" -d "$json_body"
     else
@@ -160,7 +160,7 @@ do_post() {
 do_put() {
     local url="$1"
     local json_body="$2"
-    local apikey="$3"
+    local apikey="${3:-}"
     if [ -n "$apikey" ]; then
         curl -s -X PUT "$url" -H "apikey: $apikey" -H "Content-Type: application/json" -d "$json_body"
     else
@@ -170,7 +170,7 @@ do_put() {
 
 do_delete() {
     local url="$1"
-    local apikey="$2"
+    local apikey="${2:-}"
     if [ -n "$apikey" ]; then
         curl -s -X DELETE "$url" -H "apikey: $apikey"
     else
@@ -181,8 +181,8 @@ do_delete() {
 get_status() {
     local url="$1"
     local method="${2:-GET}"
-    local apikey="$3"
-    local body="$4"
+    local apikey="${3:-}"
+    local body="${4:-}"
     local args=(-s -o /dev/null -w '%{http_code}')
     if [ "$method" != "GET" ]; then args+=(-X "$method"); fi
     if [ -n "$apikey" ]; then args+=(-H "apikey: $apikey"); fi
@@ -192,7 +192,7 @@ get_status() {
 
 get_headers() {
     local url="$1"
-    local apikey="$2"
+    local apikey="${2:-}"
     if [ -n "$apikey" ]; then
         curl -s -I -H "apikey: $apikey" "$url"
     else
