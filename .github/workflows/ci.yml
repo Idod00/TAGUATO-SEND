@@ -33,7 +33,8 @@ jobs:
       - name: Lint shell scripts
         run: |
           shellcheck --severity=warning -x \
-            install.sh test.sh db/seed-admin.sh scripts/*.sh
+            install.sh test.sh db/seed-admin.sh scripts/*.sh \
+            tests/run_all.sh tests/helpers/*.sh tests/[0-9][0-9]_*.sh
 
   build:
     name: Build
@@ -102,8 +103,8 @@ jobs:
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'taguato'")
           TABLES=$(echo "$TABLES" | tr -d '[:space:]')
           echo "Found $TABLES tables in taguato schema"
-          if [ "$TABLES" -lt 10 ]; then
-            echo "ERROR: Expected at least 10 tables, found $TABLES"
+          if [ "$TABLES" -lt 19 ]; then
+            echo "ERROR: Expected at least 19 tables, found $TABLES"
             exit 1
           fi
           echo "Schema validation passed"
@@ -204,14 +205,15 @@ jobs:
           echo "Admin token extracted (${TOKEN:0:8}...)"
           echo "ADMIN_TOKEN=$TOKEN" >> "$GITHUB_OUTPUT"
 
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
       - name: Run integration tests
         env:
           ADMIN_TOKEN: ${{ steps.admin-token.outputs.ADMIN_TOKEN }}
         run: |
-          # Override the hardcoded token in test.sh with the real one
-          sed -i "s|^ADMIN_TOKEN=.*|ADMIN_TOKEN=\"${ADMIN_TOKEN}\"|" test.sh
-          chmod +x test.sh
-          bash test.sh
+          chmod +x tests/run_all.sh
+          bash tests/run_all.sh
 
       - name: Collect logs on failure
         if: failure()
