@@ -58,20 +58,18 @@ assert_status "OPTIONS preflight -> 204" "204" "$STATUS"
 # --- Rate Limiting ---
 print_section "15d. RATE LIMITING"
 
-# ci_user2 has rate_limit=100, which is per-second window
-# We test by sending rapid requests — with rate_limit=100, it's hard to exceed in tests
-# Instead verify the mechanism works by checking a user with low limit
-# Create a user with very low rate limit
+# Per-user rate limiting is enforced in auth.lua with 60s window
+# Use a fast endpoint (not fetchInstances which proxies to Evolution API ~75s)
+# Create a user with very low rate limit (2 req per 60s window)
 BODY=$(do_post "$BASE/admin/users" \
     '{"username":"ci_rate_user","password":"CiTestPass1","rate_limit":2}' "$ADMIN_TOKEN")
 RATE_TOKEN=$(json_val "$BODY" '.user.api_token')
 RATE_UID=$(json_val "$BODY" '.user.id')
 
-# Send rapid requests to exceed limit
-do_get "$BASE/instance/fetchInstances" "$RATE_TOKEN" > /dev/null
-do_get "$BASE/instance/fetchInstances" "$RATE_TOKEN" > /dev/null
-do_get "$BASE/instance/fetchInstances" "$RATE_TOKEN" > /dev/null
-STATUS=$(get_status "$BASE/instance/fetchInstances" "GET" "$RATE_TOKEN")
+# Send 3 sequential requests to exhaust limit (rate_limit=2), 3rd should fail
+do_get "$BASE/api/templates" "$RATE_TOKEN" > /dev/null
+do_get "$BASE/api/templates" "$RATE_TOKEN" > /dev/null
+STATUS=$(get_status "$BASE/api/templates" "GET" "$RATE_TOKEN")
 assert_status "Rate limited user gets 429" "429" "$STATUS"
 
 # Cleanup rate limit user
