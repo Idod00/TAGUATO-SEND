@@ -93,7 +93,7 @@ echo -e "${YELLOW}3. ADMIN - CRUD DE USUARIOS${NC}"
 BODY=$(curl -s -X POST "$BASE/admin/users" \
   -H "apikey: $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"username":"test_user1","password":"pass123","max_instances":2}')
+  -d '{"username":"test_user1","password":"TestPass1","max_instances":2}')
 STATUS=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user',{}).get('id',''))" 2>/dev/null || echo "")
 assert_contains "POST /admin/users crea usuario" "test_user1" "$BODY"
 assert_contains "Respuesta incluye api_token" "api_token" "$BODY"
@@ -107,7 +107,7 @@ echo -e "       User1 ID=$USER1_ID Token=${USER1_TOKEN:0:16}..."
 BODY=$(curl -s -X POST "$BASE/admin/users" \
   -H "apikey: $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"username":"test_user2","password":"pass456","max_instances":2}')
+  -d '{"username":"test_user2","password":"TestPass2","max_instances":2}')
 assert_contains "Crear segundo usuario" "test_user2" "$BODY"
 
 USER2_TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['user']['api_token'])" 2>/dev/null)
@@ -118,7 +118,7 @@ echo -e "       User2 ID=$USER2_ID Token=${USER2_TOKEN:0:16}..."
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/admin/users" \
   -H "apikey: $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"username":"test_user1","password":"otro_pass","max_instances":1}')
+  -d '{"username":"test_user1","password":"OtroPass1","max_instances":1}')
 assert_status "Usuario duplicado retorna 409" "409" "$STATUS"
 
 # 3d. Crear usuario sin campos requeridos
