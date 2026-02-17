@@ -47,6 +47,7 @@ jobs:
       - name: Verify gateway starts
         run: |
           docker run -d --name gw-test \
+            --add-host taguato-api:127.0.0.1 \
             -e AUTHENTICATION_API_KEY=test_key \
             -e PG_HOST=localhost \
             -e REDIS_HOST=localhost \
@@ -110,6 +111,7 @@ jobs:
       - name: Run seed-admin.sh
         env:
           PGPASSWORD: test_password
+          PGHOST: localhost
         run: |
           # Simulate what Docker entrypoint does
           export ADMIN_USERNAME=admin

@@ -20,6 +20,8 @@ ignore = {
     "212",  -- unused argument (common in callbacks)
     "213",  -- unused loop variable (for _, v in ipairs)
     "311",  -- value assigned to variable but unused (reassignment patterns)
+    "411",  -- variable was previously defined as a local (common err reuse)
+    "421",  -- shadowing definition of local variable (common err pattern)
     "631",  -- line too long
 }
 
