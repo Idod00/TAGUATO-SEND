@@ -16,6 +16,7 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-taguato_redis_secret}
       - BACKUP_INTERVAL=${BACKUP_INTERVAL:-86400}
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
     volumes:
       - ./backups:/backups
     healthcheck:
@@ -23,6 +24,11 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
     depends_on:
       taguato-api:
         condition: service_started
@@ -41,6 +47,11 @@ services:
     volumes:
       - evolution_instances:/evolution/instances
       - evolution_store:/evolution/store
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
     depends_on:
       taguato-postgres:
         condition: service_healthy
@@ -73,6 +84,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
     networks:
       - taguato-network
 
@@ -87,10 +103,15 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-taguato_redis_secret}", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=${REDIS_PASSWORD:-taguato_redis_secret} redis-cli ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
     networks:
       - taguato-network
 

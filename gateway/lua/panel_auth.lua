@@ -251,7 +251,14 @@ if method == "POST" and uri == "/api/auth/change-password" then
         return
     end
 
-    json.respond(200, { message = "Password changed successfully" })
+    -- Invalidate all active sessions for this user
+    db.query("UPDATE taguato.sessions SET is_active = false WHERE user_id = $1", user_id)
+
+    -- Audit log
+    local audit = require "audit"
+    audit.log(user_id, nil, "password_changed", "user", nil, nil, ngx.var.remote_addr)
+
+    json.respond(200, { message = "Password changed successfully. Please login again." })
     return
 end
 
