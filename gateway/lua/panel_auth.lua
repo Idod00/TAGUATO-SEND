@@ -273,4 +273,70 @@ if method == "POST" and uri == "/api/auth/change-password" then
     return
 end
 
+-- POST /api/auth/logout
+if method == "POST" and uri == "/api/auth/logout" then
+    local token = ngx.req.get_headers()["apikey"]
+    if not token or token == "" then
+        json.respond(401, { error = "Missing apikey header" })
+        return
+    end
+
+    local token_hash = sha256_hex(token)
+
+    -- Find the user for this token
+    local user_res = db.query(
+        "SELECT id, username FROM taguato.users WHERE api_token = $1 AND is_active = true LIMIT 1",
+        token
+    )
+    if not user_res or #user_res == 0 then
+        json.respond(401, { error = "Invalid API token" })
+        return
+    end
+
+    -- Deactivate the current session
+    local sess = db.query(
+        [[UPDATE taguato.sessions SET is_active = false
+          WHERE token_hash = $1 AND user_id = $2 AND is_active = true
+          RETURNING id]],
+        token_hash, user_res[1].id
+    )
+
+    -- Audit log
+    local audit = require "audit"
+    pcall(audit.log, user_res[1].id, user_res[1].username, "user_logout", "session", nil, nil, ngx.var.remote_addr)
+
+    json.respond(200, { message = "Logged out successfully" })
+    return
+end
+
+-- POST /api/auth/logout-all
+if method == "POST" and uri == "/api/auth/logout-all" then
+    local token = ngx.req.get_headers()["apikey"]
+    if not token or token == "" then
+        json.respond(401, { error = "Missing apikey header" })
+        return
+    end
+
+    local user_res = db.query(
+        "SELECT id, username FROM taguato.users WHERE api_token = $1 AND is_active = true LIMIT 1",
+        token
+    )
+    if not user_res or #user_res == 0 then
+        json.respond(401, { error = "Invalid API token" })
+        return
+    end
+
+    -- Deactivate all sessions for this user
+    db.query(
+        "UPDATE taguato.sessions SET is_active = false WHERE user_id = $1 AND is_active = true",
+        user_res[1].id
+    )
+
+    local audit = require "audit"
+    pcall(audit.log, user_res[1].id, user_res[1].username, "user_logout_all", "session", nil, nil, ngx.var.remote_addr)
+
+    json.respond(200, { message = "All sessions logged out successfully" })
+    return
+end
+
 json.respond(404, { error = "Not found" })

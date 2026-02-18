@@ -85,4 +85,31 @@ return {
             CREATE INDEX IF NOT EXISTS idx_password_resets_token ON taguato.password_resets(reset_token) WHERE reset_token IS NOT NULL;
         ]],
     },
+    {
+        version = 8,
+        name = "add_missing_indexes",
+        sql = [[
+            -- message_logs: filtered by status, instance_name, message_type
+            CREATE INDEX IF NOT EXISTS idx_message_logs_status ON taguato.message_logs(status);
+            CREATE INDEX IF NOT EXISTS idx_message_logs_instance ON taguato.message_logs(instance_name);
+            CREATE INDEX IF NOT EXISTS idx_message_logs_user_created ON taguato.message_logs(user_id, created_at DESC);
+
+            -- audit_log: filtered by action, username, resource_type
+            CREATE INDEX IF NOT EXISTS idx_audit_log_username ON taguato.audit_log(username);
+            CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON taguato.audit_log(resource_type);
+
+            -- scheduled_messages: filtered by status + scheduled_at
+            CREATE INDEX IF NOT EXISTS idx_scheduled_status ON taguato.scheduled_messages(status);
+            CREATE INDEX IF NOT EXISTS idx_scheduled_user_created ON taguato.scheduled_messages(user_id, created_at DESC);
+
+            -- sessions: filtered by is_active
+            CREATE INDEX IF NOT EXISTS idx_sessions_active ON taguato.sessions(user_id, is_active) WHERE is_active = true;
+
+            -- incidents: filtered by status
+            CREATE INDEX IF NOT EXISTS idx_incidents_status_created ON taguato.incidents(status, created_at DESC);
+
+            -- scheduled_maintenances: filtered by status
+            CREATE INDEX IF NOT EXISTS idx_maintenance_status ON taguato.scheduled_maintenances(status);
+        ]],
+    },
 }

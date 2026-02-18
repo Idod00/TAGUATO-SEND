@@ -313,3 +313,23 @@ CREATE TABLE IF NOT EXISTS taguato.password_resets (
 );
 CREATE INDEX IF NOT EXISTS idx_password_resets_user ON taguato.password_resets(user_id);
 CREATE INDEX IF NOT EXISTS idx_password_resets_token ON taguato.password_resets(reset_token) WHERE reset_token IS NOT NULL;
+
+-- ============================================
+-- Scheduled message idempotency (v6)
+-- ============================================
+ALTER TABLE taguato.message_logs ADD COLUMN IF NOT EXISTS scheduled_message_id INT REFERENCES taguato.scheduled_messages(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_message_logs_scheduled ON taguato.message_logs(scheduled_message_id, phone_number) WHERE scheduled_message_id IS NOT NULL;
+
+-- ============================================
+-- Performance indexes (v8)
+-- ============================================
+CREATE INDEX IF NOT EXISTS idx_message_logs_status ON taguato.message_logs(status);
+CREATE INDEX IF NOT EXISTS idx_message_logs_instance ON taguato.message_logs(instance_name);
+CREATE INDEX IF NOT EXISTS idx_message_logs_user_created ON taguato.message_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_username ON taguato.audit_log(username);
+CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON taguato.audit_log(resource_type);
+CREATE INDEX IF NOT EXISTS idx_scheduled_status ON taguato.scheduled_messages(status);
+CREATE INDEX IF NOT EXISTS idx_scheduled_user_created ON taguato.scheduled_messages(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sessions_active ON taguato.sessions(user_id, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_incidents_status_created ON taguato.incidents(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_maintenance_status ON taguato.scheduled_maintenances(status);

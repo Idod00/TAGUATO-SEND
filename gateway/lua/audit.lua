@@ -70,6 +70,18 @@ function _M.handle()
         vals[idx] = args.resource_type
     end
 
+    if args.date_from and args.date_from ~= "" then
+        idx = idx + 1
+        conditions[#conditions + 1] = "created_at >= $" .. idx .. "::timestamp"
+        vals[idx] = args.date_from
+    end
+
+    if args.date_to and args.date_to ~= "" then
+        idx = idx + 1
+        conditions[#conditions + 1] = "created_at <= $" .. idx .. "::timestamp"
+        vals[idx] = args.date_to
+    end
+
     local where = ""
     if #conditions > 0 then
         where = " WHERE " .. table.concat(conditions, " AND ")
