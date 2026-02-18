@@ -292,3 +292,24 @@ CREATE TABLE IF NOT EXISTS taguato.user_webhooks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_webhooks_user ON taguato.user_webhooks(user_id);
+
+-- ============================================
+-- Password recovery
+-- ============================================
+ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS email VARCHAR(255) UNIQUE;
+ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS phone_number VARCHAR(30);
+CREATE INDEX IF NOT EXISTS idx_users_email ON taguato.users(email) WHERE email IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS taguato.password_resets (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES taguato.users(id) ON DELETE CASCADE,
+    reset_code VARCHAR(6) NOT NULL,
+    reset_token VARCHAR(64),
+    method VARCHAR(10) DEFAULT 'email' CHECK (method IN ('email', 'whatsapp')),
+    attempts INT DEFAULT 0,
+    expires_at TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '15 minutes'),
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON taguato.password_resets(user_id);
+CREATE INDEX IF NOT EXISTS idx_password_resets_token ON taguato.password_resets(reset_token) WHERE reset_token IS NOT NULL;

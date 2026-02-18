@@ -18,6 +18,15 @@ end
 local method = ngx.req.get_method()
 local uri = ngx.var.uri
 
+-- Delegate password recovery endpoints (no auth required)
+if uri == "/api/auth/forgot-password"
+    or uri == "/api/auth/verify-reset-code"
+    or uri == "/api/auth/reset-password" then
+    local recovery = require "recovery"
+    recovery.handle()
+    return
+end
+
 -- POST /api/auth/login
 if method == "POST" and uri == "/api/auth/login" then
     local body, err = json.read_body()
@@ -125,7 +134,7 @@ if method == "GET" and uri == "/api/auth/me" then
     end
 
     local res, err = db.query(
-        [[SELECT u.id, u.username, u.role, u.max_instances, u.is_active, u.must_change_password, u.created_at
+        [[SELECT u.id, u.username, u.role, u.max_instances, u.is_active, u.must_change_password, u.email, u.phone_number, u.created_at
           FROM taguato.users u
           WHERE u.api_token = $1
           LIMIT 1]],
@@ -184,6 +193,8 @@ if method == "GET" and uri == "/api/auth/me" then
             role = user.role,
             max_instances = user.max_instances,
             must_change_password = user.must_change_password,
+            email = user.email,
+            phone_number = user.phone_number,
             created_at = user.created_at,
             instances = instances or {},
         }

@@ -91,4 +91,18 @@ function _M.validate_instance_name(val)
     return true
 end
 
+-- Validate email: basic pattern, max 255 chars
+function _M.validate_email(val)
+    if not val or type(val) ~= "string" then
+        return false, "Email is required"
+    end
+    if #val > 255 then
+        return false, "Email must be at most 255 characters"
+    end
+    if not val:match("^[%w%._%+%-]+@[%w%.%-]+%.[%a]+$") then
+        return false, "Invalid email format"
+    end
+    return true
+end
+
 return _M

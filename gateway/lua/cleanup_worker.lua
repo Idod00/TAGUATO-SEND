@@ -71,6 +71,16 @@ function _M.check()
 
     -- 7. Retry failed webhook configurations
     _M.retry_webhooks()
+
+    -- 8. Cleanup expired/used password reset codes
+    local pr_del, pr_err = db.query(
+        [[DELETE FROM taguato.password_resets
+          WHERE (used_at IS NOT NULL AND used_at < NOW() - INTERVAL '1 hour')
+             OR expires_at < NOW() - INTERVAL '24 hours']]
+    )
+    if pr_del and type(pr_del) == "table" and #pr_del > 0 then
+        log.info("cleanup_worker", "cleaned password_resets", { count = #pr_del })
+    end
 end
 
 -- Heavy tasks: run once per cycle (every 6 hours via separate timer)

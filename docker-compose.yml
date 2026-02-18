@@ -17,6 +17,13 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-taguato_redis_secret}
       - BACKUP_INTERVAL=${BACKUP_INTERVAL:-86400}
       - CORS_ORIGIN=${GATEWAY_CORS_ORIGIN:-${CORS_ORIGIN:-*}}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_SECURE=${SMTP_SECURE:-tls}
+      - RECOVERY_ADMIN_INSTANCE=${RECOVERY_ADMIN_INSTANCE:-}
     volumes:
       - ./backups:/backups
       - evolution_instances:/evolution_instances:ro

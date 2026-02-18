@@ -83,6 +83,28 @@ if method == "POST" and uri == "/admin/users" then
         end
     end
 
+    local email_val = body.email
+    if email_val and email_val ~= "" then
+        local em_ok, em_err = validate.validate_email(email_val)
+        if not em_ok then
+            json.respond(400, { error = em_err })
+            return
+        end
+    else
+        email_val = nil
+    end
+
+    local phone_val = body.phone_number
+    if phone_val and phone_val ~= "" then
+        local ph_ok, ph_err = validate.validate_phone(phone_val)
+        if not ph_ok then
+            json.respond(400, { error = ph_err })
+            return
+        end
+    else
+        phone_val = nil
+    end
+
     local rate_limit_val = body.rate_limit
 
     -- Generate token
@@ -92,10 +114,10 @@ if method == "POST" and uri == "/admin/users" then
     db.begin()
 
     local res, ins_err = db.query(
-        [[INSERT INTO taguato.users (username, password_hash, role, api_token, max_instances, rate_limit)
-          VALUES ($1, crypt($2, gen_salt('bf')), $3, $4, $5, $6)
-          RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, created_at]],
-        username, password, role, token, max_instances, rate_limit_val
+        [[INSERT INTO taguato.users (username, password_hash, role, api_token, max_instances, rate_limit, email, phone_number)
+          VALUES ($1, crypt($2, gen_salt('bf')), $3, $4, $5, $6, $7, $8)
+          RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at]],
+        username, password, role, token, max_instances, rate_limit_val, email_val, phone_val
     )
 
     if not res then
@@ -129,7 +151,7 @@ end
 -- GET /admin/users - List users
 if method == "GET" and uri == "/admin/users" then
     local res, err = db.query(
-        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, created_at, updated_at FROM taguato.users ORDER BY id"
+        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at, updated_at FROM taguato.users ORDER BY id"
     )
 
     if not res then
@@ -144,7 +166,7 @@ end
 -- GET /admin/users/{id} - Get user with instances
 if method == "GET" and user_id then
     local res, err = db.query(
-        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, created_at, updated_at FROM taguato.users WHERE id = $1",
+        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at, updated_at FROM taguato.users WHERE id = $1",
         user_id
     )
 
@@ -207,6 +229,38 @@ if method == "PUT" and user_id then
         vals[idx] = body.rate_limit
     end
 
+    if body.email ~= nil then
+        if body.email == "" then
+            -- Allow clearing email by passing empty string
+            sets[#sets + 1] = "email = NULL"
+        else
+            local em_ok, em_err = validate.validate_email(body.email)
+            if not em_ok then
+                json.respond(400, { error = em_err })
+                return
+            end
+            idx = idx + 1
+            sets[#sets + 1] = "email = $" .. idx
+            vals[idx] = body.email
+        end
+    end
+
+    if body.phone_number ~= nil then
+        if body.phone_number == "" then
+            -- Allow clearing phone_number by passing empty string
+            sets[#sets + 1] = "phone_number = NULL"
+        else
+            local ph_ok, ph_err = validate.validate_phone(body.phone_number)
+            if not ph_ok then
+                json.respond(400, { error = ph_err })
+                return
+            end
+            idx = idx + 1
+            sets[#sets + 1] = "phone_number = $" .. idx
+            vals[idx] = body.phone_number
+        end
+    end
+
     if body.password ~= nil then
         local pw_ok, pw_err = validate.validate_password(body.password)
         if not pw_ok then
@@ -241,7 +295,7 @@ if method == "PUT" and user_id then
 
     local sql = "UPDATE taguato.users SET " .. table.concat(sets, ", ") ..
                 " WHERE id = $" .. idx ..
-                " RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, updated_at"
+                " RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, email, phone_number, updated_at"
 
     -- Use transaction: UPDATE user + audit log
     db.begin()
