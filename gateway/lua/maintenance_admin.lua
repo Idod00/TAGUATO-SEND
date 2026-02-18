@@ -83,7 +83,7 @@ if method == "POST" and uri == "/admin/maintenance" then
         title, description, scheduled_start, scheduled_end, user.id
     )
     if not res or #res == 0 then
-        json.respond(500, { error = "Failed to create maintenance: " .. (err or "unknown") })
+        json.respond(500, { error = "Failed to create maintenance" })
         return
     end
 
@@ -148,6 +148,12 @@ if method == "PUT" and maint_id then
     end
 
     if body.status then
+        local validate = require "validate"
+        local st_ok, st_err = validate.validate_enum(body.status, "status", {"scheduled", "in_progress", "completed"})
+        if not st_ok then
+            json.respond(400, { error = st_err })
+            return
+        end
         idx = idx + 1
         sets[#sets + 1] = "status = $" .. idx
         vals[idx] = body.status

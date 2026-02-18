@@ -125,7 +125,7 @@ if method == "POST" and uri == "/admin/users" then
         if ins_err and ins_err:find("duplicate key") then
             json.respond(409, { error = "Username already exists" })
         else
-            json.respond(500, { error = "Failed to create user: " .. (ins_err or "unknown") })
+            json.respond(500, { error = "Failed to create user" })
         end
         return
     end

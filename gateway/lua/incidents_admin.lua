@@ -96,6 +96,18 @@ if method == "POST" and uri == "/admin/incidents" then
         return
     end
 
+    local validate = require "validate"
+    local sev_ok, sev_err = validate.validate_enum(severity, "severity", {"minor", "major", "critical"})
+    if not sev_ok then
+        json.respond(400, { error = sev_err })
+        return
+    end
+    local st_ok, st_err = validate.validate_enum(status, "status", {"investigating", "identified", "monitoring", "resolved"})
+    if not st_ok then
+        json.respond(400, { error = st_err })
+        return
+    end
+
     if not message then
         json.respond(400, { error = "message is required (initial update)" })
         return
@@ -109,7 +121,7 @@ if method == "POST" and uri == "/admin/incidents" then
         title, severity, status, user.id
     )
     if not res or #res == 0 then
-        json.respond(500, { error = "Failed to create incident: " .. (err or "unknown") })
+        json.respond(500, { error = "Failed to create incident" })
         return
     end
 
@@ -161,6 +173,13 @@ if method == "POST" and incident_id and is_update_route then
         return
     end
 
+    local validate = require "validate"
+    local st_ok, st_err = validate.validate_enum(status, "status", {"investigating", "identified", "monitoring", "resolved"})
+    if not st_ok then
+        json.respond(400, { error = st_err })
+        return
+    end
+
     -- Insert update
     local res, err = db.query(
         [[INSERT INTO taguato.incident_updates (incident_id, status, message, created_by)
@@ -169,7 +188,7 @@ if method == "POST" and incident_id and is_update_route then
         incident_id, status, message, user.id
     )
     if not res or #res == 0 then
-        json.respond(500, { error = "Failed to add update: " .. (err or "unknown") })
+        json.respond(500, { error = "Failed to add update" })
         return
     end
 
@@ -204,6 +223,12 @@ if method == "PUT" and incident_id and uri:match("^/admin/incidents/%d+$") then
     end
 
     if body.severity then
+        local validate = require "validate"
+        local sev_ok, sev_err = validate.validate_enum(body.severity, "severity", {"minor", "major", "critical"})
+        if not sev_ok then
+            json.respond(400, { error = sev_err })
+            return
+        end
         idx = idx + 1
         sets[#sets + 1] = "severity = $" .. idx
         vals[idx] = body.severity

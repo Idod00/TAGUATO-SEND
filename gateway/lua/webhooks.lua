@@ -62,9 +62,10 @@ if method == "POST" and uri == "/api/webhooks" then
         return
     end
 
-    -- Basic URL validation
-    if not body.webhook_url:match("^https?://") then
-        json.respond(400, { error = "webhook_url must start with http:// or https://" })
+    -- URL validation (SSRF protection)
+    local url_ok, url_err = validate.validate_webhook_url(body.webhook_url)
+    if not url_ok then
+        json.respond(400, { error = url_err })
         return
     end
 

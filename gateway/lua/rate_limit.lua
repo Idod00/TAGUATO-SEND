@@ -32,25 +32,25 @@ function _M.check(user_id, limit)
         return check_shared_dict(user_id, limit)
     end
 
+    -- Atomic incr+expire via Lua script to avoid race conditions
     local key = "taguato:ratelimit:" .. user_id
-    local current, err = red:incr(key)
+    local script = [[
+        local current = redis.call('incr', KEYS[1])
+        if current == 1 then
+            redis.call('expire', KEYS[1], ARGV[1])
+        end
+        return current
+    ]]
+    local current, err = red:eval(script, 1, key, 1)
     if not current then
         red:set_keepalive(10000, 10)
-        ngx.log(ngx.WARN, "rate_limit: redis incr failed, using shared dict fallback: ", err)
+        ngx.log(ngx.WARN, "rate_limit: redis eval failed, using shared dict fallback: ", err)
         return check_shared_dict(user_id, limit)
-    end
-
-    if current == 1 then
-        red:expire(key, 1)
     end
 
     red:set_keepalive(10000, 10)
 
-    if current > limit then
-        return false
-    end
-
-    return true
+    return current <= limit
 end
 
 return _M

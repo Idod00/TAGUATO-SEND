@@ -6,6 +6,7 @@
 local _M = {}
 
 -- Rate limit helper: max N requests per key per window (seconds) using Redis
+-- Uses atomic Lua script to avoid race conditions between get+incr
 local function check_rate_limit(key, max_requests, window_seconds)
     local db = require "init"
     local red, err = db.get_redis(2000)
@@ -15,25 +16,22 @@ local function check_rate_limit(key, max_requests, window_seconds)
     end
 
     local redis_key = "recovery_rl:" .. key
-    local count, get_err = red:get(redis_key)
-    if count == ngx.null then
-        count = 0
-    else
-        count = tonumber(count) or 0
-    end
-
-    if count >= max_requests then
+    local script = [[
+        local current = redis.call('incr', KEYS[1])
+        if current == 1 then
+            redis.call('expire', KEYS[1], ARGV[1])
+        end
+        return current
+    ]]
+    local current, eval_err = red:eval(script, 1, redis_key, window_seconds)
+    if not current then
+        ngx.log(ngx.WARN, "recovery rate limit: Redis eval failed: ", eval_err)
         red:set_keepalive(10000, 10)
-        return false
-    end
-
-    red:incr(redis_key)
-    if count == 0 then
-        red:expire(redis_key, window_seconds)
+        return true
     end
 
     red:set_keepalive(10000, 10)
-    return true
+    return current <= max_requests
 end
 
 -- Send recovery code via WhatsApp using the admin's designated instance

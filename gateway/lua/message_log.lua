@@ -37,9 +37,33 @@ if method == "POST" and uri == "/api/messages/log" then
     local status = body.status or "sent"
     local error_message = body.error_message
 
+    local validate = require "validate"
+    local mt_ok, mt_err = validate.validate_enum(message_type, "message_type", {"text", "image", "document", "audio", "video"})
+    if not mt_ok then
+        json.respond(400, { error = mt_err })
+        return
+    end
+    local st_ok, st_err = validate.validate_enum(status, "status", {"sent", "failed", "cancelled"})
+    if not st_ok then
+        json.respond(400, { error = st_err })
+        return
+    end
+
     if not instance_name or not phone_number then
         json.respond(400, { error = "instance_name and phone_number are required" })
         return
+    end
+
+    -- Verify instance ownership (admin bypass)
+    if user.role ~= "admin" then
+        local own = db.query(
+            "SELECT id FROM taguato.user_instances WHERE user_id = $1 AND instance_name = $2 LIMIT 1",
+            user.id, instance_name
+        )
+        if not own or #own == 0 then
+            json.respond(403, { error = "You do not own this instance" })
+            return
+        end
     end
 
     local res, err = db.query(

@@ -145,6 +145,12 @@ if method == "POST" and uri == "/api/scheduled" then
     end
 
     local message_type = body.message_type or "text"
+    local mt_ok, mt_err = validate.validate_enum(message_type, "message_type", {"text", "image", "document", "audio", "video"})
+    if not mt_ok then
+        json.respond(400, { error = mt_err })
+        return
+    end
+
     local recipients_json = cjson.encode(body.recipients)
 
     local res, err = db.query(
@@ -193,6 +199,11 @@ if method == "PUT" and msg_id then
         vals[idx] = body.instance_name
     end
     if body.message_type then
+        local mt_ok, mt_err = validate.validate_enum(body.message_type, "message_type", {"text", "image", "document", "audio", "video"})
+        if not mt_ok then
+            json.respond(400, { error = mt_err })
+            return
+        end
         idx = idx + 1
         sets[#sets + 1] = "message_type = $" .. idx
         vals[idx] = body.message_type
