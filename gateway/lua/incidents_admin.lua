@@ -36,44 +36,96 @@ if method == "GET" and uri == "/admin/incidents/services" then
     return
 end
 
--- Route: GET /admin/incidents - List all incidents
+-- Helper: decode json_agg string fields returned by PostgreSQL
+local function decode_json_field(row, field)
+    if type(row[field]) == "string" then
+        local ok, data = pcall(cjson.decode, row[field])
+        row[field] = ok and data or as_array(nil)
+    elseif not row[field] then
+        row[field] = as_array(nil)
+    end
+end
+
+-- Route: GET /admin/incidents - List all incidents (paginated)
 if method == "GET" and uri == "/admin/incidents" then
-    local res, err = db.query([[
+    local args = ngx.req.get_uri_args()
+    local page = tonumber(args.page) or 1
+    local limit = tonumber(args.limit) or 50
+    if limit > 100 then limit = 100 end
+    local offset = (page - 1) * limit
+
+    local conditions = {}
+    local vals = {}
+    local idx = 0
+
+    if args.status and args.status ~= "" then
+        idx = idx + 1
+        conditions[#conditions + 1] = "i.status = $" .. idx
+        vals[idx] = args.status
+    end
+
+    local where = ""
+    if #conditions > 0 then
+        where = " WHERE " .. table.concat(conditions, " AND ")
+    end
+
+    -- Count total
+    local count_sql = "SELECT COUNT(*) as total FROM taguato.incidents i" .. where
+    local count_res = db.query(count_sql, unpack(vals))
+    local total = 0
+    if count_res and #count_res > 0 then
+        total = tonumber(count_res[1].total) or 0
+    end
+
+    -- Fetch page with correlated subqueries (no N+1)
+    idx = idx + 1
+    vals[idx] = limit
+    idx = idx + 1
+    vals[idx] = offset
+
+    local data_sql = [[
         SELECT i.id, i.title, i.severity, i.status, i.created_at, i.updated_at, i.resolved_at,
-               u.username as created_by_name
+               u.username as created_by_name,
+               COALESCE((SELECT json_agg(row_to_json(s_row)) FROM (
+                   SELECT s.id, s.name FROM taguato.incident_services isv
+                   JOIN taguato.services s ON s.id = isv.service_id
+                   WHERE isv.incident_id = i.id
+                   ORDER BY s.display_order
+               ) s_row), '[]') as affected_services,
+               COALESCE((SELECT json_agg(row_to_json(u_row)) FROM (
+                   SELECT iu.id, iu.status, iu.message, iu.created_at,
+                          ux.username as created_by_name
+                   FROM taguato.incident_updates iu
+                   LEFT JOIN taguato.users ux ON ux.id = iu.created_by
+                   WHERE iu.incident_id = i.id
+                   ORDER BY iu.created_at DESC
+               ) u_row), '[]') as updates
         FROM taguato.incidents i
         LEFT JOIN taguato.users u ON u.id = i.created_by
+    ]] .. where .. [[
         ORDER BY
             CASE WHEN i.status != 'resolved' THEN 0 ELSE 1 END,
             i.created_at DESC
-    ]])
+        LIMIT $]] .. (idx - 1) .. " OFFSET $" .. idx
+
+    local res = db.query(data_sql, unpack(vals))
     if not res then
         json.respond(500, { error = "Failed to list incidents" })
         return
     end
 
-    -- Enrich with affected services and updates
     for _, inc in ipairs(res) do
-        local svc_res = db.query([[
-            SELECT s.id, s.name FROM taguato.incident_services isv
-            JOIN taguato.services s ON s.id = isv.service_id
-            WHERE isv.incident_id = $1
-            ORDER BY s.display_order
-        ]], inc.id)
-        inc.affected_services = as_array(svc_res)
-
-        local upd_res = db.query([[
-            SELECT iu.id, iu.status, iu.message, iu.created_at,
-                   u.username as created_by_name
-            FROM taguato.incident_updates iu
-            LEFT JOIN taguato.users u ON u.id = iu.created_by
-            WHERE iu.incident_id = $1
-            ORDER BY iu.created_at DESC
-        ]], inc.id)
-        inc.updates = as_array(upd_res)
+        decode_json_field(inc, "affected_services")
+        decode_json_field(inc, "updates")
     end
 
-    json.respond(200, { incidents = as_array(res) })
+    json.respond(200, {
+        incidents = as_array(res),
+        total = total,
+        page = page,
+        limit = limit,
+        pages = math.ceil(total / limit),
+    })
     return
 end
 

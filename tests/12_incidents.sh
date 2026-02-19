@@ -29,11 +29,13 @@ STATUS=$(get_status "$BASE/admin/incidents" "POST" "$ADMIN_TOKEN" \
     '{"title":"no message","severity":"minor"}')
 assert_status "Incident without message -> 400" "400" "$STATUS"
 
-# --- List incidents ---
+# --- List incidents (paginated) ---
 BODY=$(do_get "$BASE/admin/incidents" "$ADMIN_TOKEN")
 assert_contains "List includes CI test incident" "CI Test Incident" "$BODY"
 assert_contains "Includes affected_services" "affected_services" "$BODY"
 assert_contains "Includes updates timeline" "updates" "$BODY"
+assert_json_field "Incidents has page field" ".page" "1" "$BODY"
+assert_contains "Incidents has total field" '"total"' "$BODY"
 
 # --- Add update to timeline ---
 BODY=$(do_post "$BASE/admin/incidents/$INC_ID/updates" \

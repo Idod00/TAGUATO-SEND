@@ -97,9 +97,29 @@ elseif degraded then
     overall = "degraded"
 end
 
--- Check for active incidents that might override overall status
+-- Helper: decode json_agg string fields returned by PostgreSQL
+local function decode_json_field(row, field)
+    if type(row[field]) == "string" then
+        local ok, data = pcall(cjson.decode, row[field])
+        row[field] = ok and data or as_array(nil)
+    elseif not row[field] then
+        row[field] = as_array(nil)
+    end
+end
+
+-- Active incidents with services + updates (single query, no N+1)
 local active_incidents_res = db.query([[
-    SELECT i.id, i.title, i.severity, i.status, i.created_at, i.updated_at
+    SELECT i.id, i.title, i.severity, i.status, i.created_at, i.updated_at,
+           COALESCE((SELECT json_agg(s.name ORDER BY s.display_order)
+                     FROM taguato.incident_services isv
+                     JOIN taguato.services s ON s.id = isv.service_id
+                     WHERE isv.incident_id = i.id), '[]') as affected_services,
+           COALESCE((SELECT json_agg(row_to_json(u_row)) FROM (
+               SELECT iu.status, iu.message, iu.created_at
+               FROM taguato.incident_updates iu
+               WHERE iu.incident_id = i.id
+               ORDER BY iu.created_at DESC
+           ) u_row), '[]') as updates
     FROM taguato.incidents i
     WHERE i.status != 'resolved'
     ORDER BY i.created_at DESC
@@ -114,36 +134,23 @@ for _, inc in ipairs(active_incidents) do
     elseif inc.severity == "minor" and overall == "operational" then
         overall = "degraded"
     end
+    decode_json_field(inc, "affected_services")
+    decode_json_field(inc, "updates")
 end
 
--- Enrich active incidents with affected services and updates
-for _, inc in ipairs(active_incidents) do
-    local svc_res = db.query([[
-        SELECT s.name FROM taguato.incident_services isv
-        JOIN taguato.services s ON s.id = isv.service_id
-        WHERE isv.incident_id = $1
-        ORDER BY s.display_order
-    ]], inc.id)
-    inc.affected_services = {}
-    if svc_res then
-        for _, s in ipairs(svc_res) do
-            inc.affected_services[#inc.affected_services + 1] = s.name
-        end
-    end
-    inc.affected_services = as_array(inc.affected_services)
-
-    local upd_res = db.query([[
-        SELECT iu.status, iu.message, iu.created_at
-        FROM taguato.incident_updates iu
-        WHERE iu.incident_id = $1
-        ORDER BY iu.created_at DESC
-    ]], inc.id)
-    inc.updates = as_array(upd_res)
-end
-
--- Recent resolved incidents (last 20)
+-- Recent resolved incidents with services + updates (single query, no N+1)
 local recent_res = db.query([[
-    SELECT i.id, i.title, i.severity, i.status, i.created_at, i.resolved_at
+    SELECT i.id, i.title, i.severity, i.status, i.created_at, i.resolved_at,
+           COALESCE((SELECT json_agg(s.name ORDER BY s.display_order)
+                     FROM taguato.incident_services isv
+                     JOIN taguato.services s ON s.id = isv.service_id
+                     WHERE isv.incident_id = i.id), '[]') as affected_services,
+           COALESCE((SELECT json_agg(row_to_json(u_row)) FROM (
+               SELECT iu.status, iu.message, iu.created_at
+               FROM taguato.incident_updates iu
+               WHERE iu.incident_id = i.id
+               ORDER BY iu.created_at DESC
+           ) u_row), '[]') as updates
     FROM taguato.incidents i
     WHERE i.status = 'resolved'
     ORDER BY i.resolved_at DESC
@@ -152,32 +159,17 @@ local recent_res = db.query([[
 local recent_incidents = as_array(recent_res)
 
 for _, inc in ipairs(recent_incidents) do
-    local svc_res = db.query([[
-        SELECT s.name FROM taguato.incident_services isv
-        JOIN taguato.services s ON s.id = isv.service_id
-        WHERE isv.incident_id = $1
-        ORDER BY s.display_order
-    ]], inc.id)
-    inc.affected_services = {}
-    if svc_res then
-        for _, s in ipairs(svc_res) do
-            inc.affected_services[#inc.affected_services + 1] = s.name
-        end
-    end
-    inc.affected_services = as_array(inc.affected_services)
-
-    local upd_res = db.query([[
-        SELECT iu.status, iu.message, iu.created_at
-        FROM taguato.incident_updates iu
-        WHERE iu.incident_id = $1
-        ORDER BY iu.created_at DESC
-    ]], inc.id)
-    inc.updates = as_array(upd_res)
+    decode_json_field(inc, "affected_services")
+    decode_json_field(inc, "updates")
 end
 
--- Scheduled maintenances (upcoming + in_progress)
+-- Scheduled maintenances with services (single query, no N+1)
 local maint_res = db.query([[
-    SELECT m.id, m.title, m.description, m.scheduled_start, m.scheduled_end, m.status
+    SELECT m.id, m.title, m.description, m.scheduled_start, m.scheduled_end, m.status,
+           COALESCE((SELECT json_agg(s.name ORDER BY s.display_order)
+                     FROM taguato.maintenance_services ms
+                     JOIN taguato.services s ON s.id = ms.service_id
+                     WHERE ms.maintenance_id = m.id), '[]') as affected_services
     FROM taguato.scheduled_maintenances m
     WHERE m.status IN ('scheduled', 'in_progress')
     ORDER BY m.scheduled_start ASC
@@ -185,19 +177,7 @@ local maint_res = db.query([[
 local maintenances = as_array(maint_res)
 
 for _, m in ipairs(maintenances) do
-    local svc_res = db.query([[
-        SELECT s.name FROM taguato.maintenance_services ms
-        JOIN taguato.services s ON s.id = ms.service_id
-        WHERE ms.maintenance_id = $1
-        ORDER BY s.display_order
-    ]], m.id)
-    m.affected_services = {}
-    if svc_res then
-        for _, s in ipairs(svc_res) do
-            m.affected_services[#m.affected_services + 1] = s.name
-        end
-    end
-    m.affected_services = as_array(m.affected_services)
+    decode_json_field(m, "affected_services")
 end
 
 -- Uptime percentages (last 30 days)

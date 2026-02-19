@@ -145,6 +145,147 @@ if method == "POST" and uri == "/api/webhooks" then
     return
 end
 
+-- PUT /api/webhooks/{id} - Update webhook
+if method == "PUT" and webhook_id then
+    -- Find webhook and verify ownership
+    local wh = db.query(
+        "SELECT id, instance_name, webhook_url, events, is_active, retry_count FROM taguato.user_webhooks WHERE id = $1 AND user_id = $2",
+        webhook_id, user.id
+    )
+    if not wh or #wh == 0 then
+        json.respond(404, { error = "Webhook not found" })
+        return
+    end
+
+    local body, err = json.read_body()
+    if not body then
+        json.respond(400, { error = "Invalid JSON body" })
+        return
+    end
+
+    local sets = {}
+    local vals = {}
+    local idx = 0
+    local needs_sync = false
+
+    if body.webhook_url ~= nil then
+        if body.webhook_url == "" then
+            json.respond(400, { error = "webhook_url cannot be empty" })
+            return
+        end
+        local url_ok, url_err = validate.validate_webhook_url(body.webhook_url)
+        if not url_ok then
+            json.respond(400, { error = url_err })
+            return
+        end
+        idx = idx + 1
+        sets[#sets + 1] = "webhook_url = $" .. idx
+        vals[idx] = body.webhook_url
+        needs_sync = true
+    end
+
+    if body.events ~= nil then
+        if type(body.events) ~= "table" then
+            json.respond(400, { error = "events must be an array" })
+            return
+        end
+        local allowed_events = {
+            QRCODE_UPDATED = true, MESSAGES_UPSERT = true, MESSAGES_UPDATE = true,
+            MESSAGES_DELETE = true, SEND_MESSAGE = true, CONNECTION_UPDATE = true,
+            CALL = true, CONTACTS_SET = true, CONTACTS_UPSERT = true,
+            CONTACTS_UPDATE = true, PRESENCE_UPDATE = true, CHATS_SET = true,
+            CHATS_UPDATE = true, CHATS_UPSERT = true, CHATS_DELETE = true,
+            GROUPS_UPSERT = true, GROUPS_UPDATE = true, GROUP_PARTICIPANTS_UPDATE = true,
+            LABELS_EDIT = true, LABELS_ASSOCIATION = true,
+        }
+        for _, ev in ipairs(body.events) do
+            if not allowed_events[ev] then
+                json.respond(400, { error = "Invalid event: " .. tostring(ev) })
+                return
+            end
+        end
+        idx = idx + 1
+        sets[#sets + 1] = "events = $" .. idx
+        vals[idx] = "{" .. table.concat(body.events, ",") .. "}"
+        needs_sync = true
+    end
+
+    if body.is_active ~= nil then
+        idx = idx + 1
+        sets[#sets + 1] = "is_active = $" .. idx
+        vals[idx] = body.is_active
+        if body.is_active == true then
+            sets[#sets + 1] = "retry_count = 0"
+            sets[#sets + 1] = "needs_sync = true"
+            needs_sync = true
+        end
+    end
+
+    if #sets == 0 then
+        json.respond(400, { error = "No fields to update" })
+        return
+    end
+
+    sets[#sets + 1] = "updated_at = NOW()"
+    idx = idx + 1
+    vals[idx] = webhook_id
+    idx = idx + 1
+    vals[idx] = user.id
+
+    local sql = "UPDATE taguato.user_webhooks SET " .. table.concat(sets, ", ") ..
+                " WHERE id = $" .. (idx - 1) .. " AND user_id = $" .. idx ..
+                " RETURNING id, instance_name, webhook_url, events, is_active, retry_count, created_at, updated_at"
+
+    local res, db_err = db.query(sql, unpack(vals))
+    if not res or #res == 0 then
+        json.respond(500, { error = "Failed to update webhook" })
+        return
+    end
+
+    -- Sync to Evolution API if URL or events changed
+    if needs_sync then
+        local api_key = os.getenv("AUTHENTICATION_API_KEY")
+        if api_key then
+            local updated = res[1]
+            local ev = updated.events or {}
+            if type(ev) == "string" then
+                local ok, parsed = pcall(cjson.decode, ev)
+                ev = ok and parsed or {}
+            end
+            local httpc = http.new()
+            httpc:set_timeout(5000)
+            local webhook_body = {
+                url = updated.webhook_url,
+                webhook_by_events = (type(ev) == "table" and #ev > 0),
+                webhook_base64 = false,
+                events = ev,
+            }
+            local api_res, api_err = httpc:request_uri(
+                "http://taguato-api:8080/webhook/set/" .. updated.instance_name,
+                {
+                    method = "POST",
+                    headers = {
+                        ["apikey"] = api_key,
+                        ["Content-Type"] = "application/json",
+                    },
+                    body = cjson.encode(webhook_body),
+                }
+            )
+            if not api_res or api_res.status >= 400 then
+                local err_msg = api_err or (api_res and "status " .. api_res.status) or "unknown"
+                ngx.log(ngx.WARN, "webhooks: failed to sync webhook update in Evolution API: ", err_msg)
+                db.query(
+                    "UPDATE taguato.user_webhooks SET needs_sync = true, last_error = $1, updated_at = NOW() WHERE id = $2",
+                    err_msg, webhook_id
+                )
+            end
+        end
+    end
+
+    json.respond(200, { webhook = res[1] })
+    return
+end
+
 -- DELETE /api/webhooks/{id} - Delete webhook
 if method == "DELETE" and webhook_id then
     -- Find webhook and verify ownership

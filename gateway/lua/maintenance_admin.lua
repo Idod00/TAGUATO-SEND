@@ -23,37 +23,90 @@ end
 local method = ngx.req.get_method()
 local uri = ngx.var.uri
 
--- Route: GET /admin/maintenance - List all maintenances
+-- Helper: decode json_agg string fields returned by PostgreSQL
+local function decode_json_field(row, field)
+    if type(row[field]) == "string" then
+        local ok, data = pcall(cjson.decode, row[field])
+        row[field] = ok and data or as_array(nil)
+    elseif not row[field] then
+        row[field] = as_array(nil)
+    end
+end
+
+-- Route: GET /admin/maintenance - List all maintenances (paginated)
 if method == "GET" and uri == "/admin/maintenance" then
-    local res, err = db.query([[
+    local args = ngx.req.get_uri_args()
+    local page = tonumber(args.page) or 1
+    local limit = tonumber(args.limit) or 50
+    if limit > 100 then limit = 100 end
+    local offset = (page - 1) * limit
+
+    local conditions = {}
+    local vals = {}
+    local idx = 0
+
+    if args.status and args.status ~= "" then
+        idx = idx + 1
+        conditions[#conditions + 1] = "m.status = $" .. idx
+        vals[idx] = args.status
+    end
+
+    local where = ""
+    if #conditions > 0 then
+        where = " WHERE " .. table.concat(conditions, " AND ")
+    end
+
+    -- Count total
+    local count_sql = "SELECT COUNT(*) as total FROM taguato.scheduled_maintenances m" .. where
+    local count_res = db.query(count_sql, unpack(vals))
+    local total = 0
+    if count_res and #count_res > 0 then
+        total = tonumber(count_res[1].total) or 0
+    end
+
+    -- Fetch page with correlated subquery (no N+1)
+    idx = idx + 1
+    vals[idx] = limit
+    idx = idx + 1
+    vals[idx] = offset
+
+    local data_sql = [[
         SELECT m.id, m.title, m.description, m.scheduled_start, m.scheduled_end,
                m.status, m.created_at, m.updated_at,
-               u.username as created_by_name
+               u.username as created_by_name,
+               COALESCE((SELECT json_agg(row_to_json(s_row)) FROM (
+                   SELECT s.id, s.name FROM taguato.maintenance_services ms
+                   JOIN taguato.services s ON s.id = ms.service_id
+                   WHERE ms.maintenance_id = m.id
+                   ORDER BY s.display_order
+               ) s_row), '[]') as affected_services
         FROM taguato.scheduled_maintenances m
         LEFT JOIN taguato.users u ON u.id = m.created_by
+    ]] .. where .. [[
         ORDER BY
             CASE WHEN m.status = 'in_progress' THEN 0
                  WHEN m.status = 'scheduled' THEN 1
                  ELSE 2 END,
             m.scheduled_start DESC
-    ]])
+        LIMIT $]] .. (idx - 1) .. " OFFSET $" .. idx
+
+    local res = db.query(data_sql, unpack(vals))
     if not res then
         json.respond(500, { error = "Failed to list maintenances" })
         return
     end
 
-    -- Enrich with affected services
     for _, m in ipairs(res) do
-        local svc_res = db.query([[
-            SELECT s.id, s.name FROM taguato.maintenance_services ms
-            JOIN taguato.services s ON s.id = ms.service_id
-            WHERE ms.maintenance_id = $1
-            ORDER BY s.display_order
-        ]], m.id)
-        m.affected_services = as_array(svc_res)
+        decode_json_field(m, "affected_services")
     end
 
-    json.respond(200, { maintenances = as_array(res) })
+    json.respond(200, {
+        maintenances = as_array(res),
+        total = total,
+        page = page,
+        limit = limit,
+        pages = math.ceil(total / limit),
+    })
     return
 end
 

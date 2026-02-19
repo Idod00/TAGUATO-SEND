@@ -49,6 +49,36 @@ BODY=$(do_post "$BASE/api/webhooks" \
 ADMIN_WH_ID=$(json_val "$BODY" '.webhook.id')
 assert_contains "Admin creates webhook for User2 instance" "ci-test-u2a" "$BODY"
 
+# --- PUT: Update webhook URL ---
+BODY=$(do_put "$BASE/api/webhooks/$WH1_ID" \
+    '{"webhook_url":"https://example.com/hook-updated"}' "$USER1_TOKEN")
+assert_json_field "Update webhook URL" ".webhook.webhook_url" "https://example.com/hook-updated" "$BODY"
+
+# --- PUT: Update webhook events ---
+BODY=$(do_put "$BASE/api/webhooks/$WH1_ID" \
+    '{"events":["MESSAGES_UPSERT","CONNECTION_UPDATE"]}' "$USER1_TOKEN")
+assert_contains "Update webhook events" "MESSAGES_UPSERT" "$BODY"
+
+# --- PUT: Invalid URL ---
+STATUS=$(get_status "$BASE/api/webhooks/$WH1_ID" "PUT" "$USER1_TOKEN" \
+    '{"webhook_url":"not-a-url"}')
+assert_status "PUT invalid webhook URL -> 400" "400" "$STATUS"
+
+# --- PUT: Invalid events ---
+STATUS=$(get_status "$BASE/api/webhooks/$WH1_ID" "PUT" "$USER1_TOKEN" \
+    '{"events":["INVALID_EVENT"]}')
+assert_status "PUT invalid event -> 400" "400" "$STATUS"
+
+# --- PUT: Reactivate webhook (resets retry_count) ---
+BODY=$(do_put "$BASE/api/webhooks/$WH1_ID" '{"is_active":true}' "$USER1_TOKEN")
+assert_json_field "Reactivate webhook" ".webhook.is_active" "true" "$BODY"
+assert_json_field "Reactivate resets retry_count" ".webhook.retry_count" "0" "$BODY"
+
+# --- PUT: Other user's webhook -> 404 ---
+STATUS=$(get_status "$BASE/api/webhooks/$WH1_ID" "PUT" "$USER2_TOKEN" \
+    '{"webhook_url":"https://example.com/hacked"}')
+assert_status "PUT other user webhook -> 404" "404" "$STATUS"
+
 # --- Delete webhook ---
 BODY=$(do_delete "$BASE/api/webhooks/$WH1_ID" "$USER1_TOKEN")
 assert_contains "Delete webhook" "deleted" "$BODY"

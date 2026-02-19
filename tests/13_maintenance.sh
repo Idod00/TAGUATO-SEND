@@ -21,10 +21,12 @@ assert_contains "Maintenance title" "CI Test Maintenance" "$BODY"
 STATUS=$(get_status "$BASE/admin/maintenance" "POST" "$ADMIN_TOKEN" '{"title":"no dates"}')
 assert_status "Maintenance without dates -> 400" "400" "$STATUS"
 
-# --- List maintenances ---
+# --- List maintenances (paginated) ---
 BODY=$(do_get "$BASE/admin/maintenance" "$ADMIN_TOKEN")
 assert_contains "List includes CI maintenance" "CI Test Maintenance" "$BODY"
 assert_contains "Includes affected_services" "affected_services" "$BODY"
+assert_json_field "Maintenance has page field" ".page" "1" "$BODY"
+assert_contains "Maintenance has total field" '"total"' "$BODY"
 
 # --- Update maintenance ---
 BODY=$(do_put "$BASE/admin/maintenance/$MAINT_ID" \

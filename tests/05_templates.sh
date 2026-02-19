@@ -8,6 +8,8 @@ print_section "05. TEMPLATES"
 # --- Empty list ---
 BODY=$(do_get "$BASE/api/templates" "$USER1_TOKEN")
 assert_json_field "User1 templates initially empty" ".templates | length" "0" "$BODY"
+assert_json_field "Templates total is 0" ".total" "0" "$BODY"
+assert_json_field "Templates page is 1" ".page" "1" "$BODY"
 
 # --- Create template ---
 BODY=$(do_post "$BASE/api/templates" \

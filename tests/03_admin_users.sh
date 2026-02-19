@@ -41,11 +41,32 @@ STATUS=$(get_status "$BASE/admin/users" "POST" "$ADMIN_TOKEN" \
     '{"username":"ci_badrole","password":"CiTestPass1","role":"superadmin"}')
 assert_status "Invalid role -> 400" "400" "$STATUS"
 
-# --- List users ---
+# --- List users (paginated) ---
 BODY=$(do_get "$BASE/admin/users" "$ADMIN_TOKEN")
 assert_contains "List includes ci_user1" "ci_user1" "$BODY"
 assert_contains "List includes ci_user2" "ci_user2" "$BODY"
 assert_contains "List includes admin" '"role":"admin"' "$BODY"
+assert_contains "Users list has total field" '"total"' "$BODY"
+assert_json_field "Users list has page field" ".page" "1" "$BODY"
+
+# --- Pagination: limit=1 ---
+BODY=$(do_get "$BASE/admin/users?limit=1" "$ADMIN_TOKEN")
+assert_json_field "Limit=1 returns 1 user" ".users | length" "1" "$BODY"
+TOTAL_USERS=$(echo "$BODY" | jq -r '.total')
+TOTAL_VAL=$((TOTAL + 1))
+TOTAL=$TOTAL_VAL
+if [ "$TOTAL_USERS" -gt "1" ]; then
+    echo -e "  ${GREEN}PASS${NC} Pagination total > 1 with limit=1"
+    PASS=$((PASS + 1))
+else
+    echo -e "  ${RED}FAIL${NC} Pagination total should be > 1 (got $TOTAL_USERS)"
+    FAIL=$((FAIL + 1))
+fi
+
+# --- Search filter ---
+BODY=$(do_get "$BASE/admin/users?search=ci_user1" "$ADMIN_TOKEN")
+assert_contains "Search finds ci_user1" "ci_user1" "$BODY"
+assert_not_contains "Search excludes ci_user2" "ci_user2" "$BODY"
 
 # --- Get single user ---
 BODY=$(do_get "$BASE/admin/users/$USER1_ID" "$ADMIN_TOKEN")

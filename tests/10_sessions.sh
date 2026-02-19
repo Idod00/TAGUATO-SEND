@@ -18,10 +18,12 @@ SESSION_ID=$(json_val "$BODY" '.sessions[0].id')
 STATUS=$(get_status "$BASE/admin/sessions" "GET" "$USER1_TOKEN")
 assert_status "Normal user cannot access /admin/sessions -> 403" "403" "$STATUS"
 
-# --- Admin list all sessions ---
+# --- Admin list all sessions (paginated) ---
 BODY=$(do_get "$BASE/admin/sessions" "$ADMIN_TOKEN")
 assert_contains "Admin sessions include username field" "username" "$BODY"
 assert_json_count "Admin sees at least 1 session" ".sessions" 1 "$BODY"
+assert_json_field "Admin sessions has page field" ".page" "1" "$BODY"
+assert_contains "Admin sessions has total field" '"total"' "$BODY"
 
 # --- Admin revoke any session ---
 if [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "null" ]; then

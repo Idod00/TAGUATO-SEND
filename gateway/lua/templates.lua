@@ -16,17 +16,41 @@ local uri = ngx.var.uri
 
 local template_id = uri:match("^/api/templates/(%d+)$")
 
--- GET /api/templates - List user's templates
+-- GET /api/templates - List user's templates (paginated)
 if method == "GET" and uri == "/api/templates" then
-    local res, err = db.query(
-        "SELECT id, name, content, created_at, updated_at FROM taguato.message_templates WHERE user_id = $1 ORDER BY updated_at DESC",
+    local args = ngx.req.get_uri_args()
+    local page = tonumber(args.page) or 1
+    local limit = tonumber(args.limit) or 50
+    if limit > 100 then limit = 100 end
+    local offset = (page - 1) * limit
+
+    -- Count total
+    local count_res = db.query(
+        "SELECT COUNT(*) as total FROM taguato.message_templates WHERE user_id = $1",
         user.id
+    )
+    local total = 0
+    if count_res and #count_res > 0 then
+        total = tonumber(count_res[1].total) or 0
+    end
+
+    -- Fetch page
+    local res, err = db.query(
+        "SELECT id, name, content, created_at, updated_at FROM taguato.message_templates WHERE user_id = $1 ORDER BY updated_at DESC LIMIT $2 OFFSET $3",
+        user.id, limit, offset
     )
     if not res then
         json.respond(500, { error = "Failed to list templates" })
         return
     end
-    json.respond(200, { templates = res })
+
+    json.respond(200, {
+        templates = res,
+        total = total,
+        page = page,
+        limit = limit,
+        pages = math.ceil(total / limit),
+    })
     return
 end
 

@@ -149,18 +149,59 @@ if method == "POST" and uri == "/admin/users" then
     return
 end
 
--- GET /admin/users - List users
+-- GET /admin/users - List users (paginated)
 if method == "GET" and uri == "/admin/users" then
-    local res, err = db.query(
-        "SELECT id, username, role, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at, updated_at FROM taguato.users ORDER BY id"
-    )
+    local args = ngx.req.get_uri_args()
+    local page = tonumber(args.page) or 1
+    local limit = tonumber(args.limit) or 50
+    if limit > 100 then limit = 100 end
+    local offset = (page - 1) * limit
 
+    local conditions = {}
+    local vals = {}
+    local idx = 0
+
+    if args.search and args.search ~= "" then
+        idx = idx + 1
+        conditions[#conditions + 1] = "username ILIKE $" .. idx
+        vals[idx] = "%" .. args.search .. "%"
+    end
+
+    local where = ""
+    if #conditions > 0 then
+        where = " WHERE " .. table.concat(conditions, " AND ")
+    end
+
+    -- Count total
+    local count_sql = "SELECT COUNT(*) as total FROM taguato.users" .. where
+    local count_res = db.query(count_sql, unpack(vals))
+    local total = 0
+    if count_res and #count_res > 0 then
+        total = tonumber(count_res[1].total) or 0
+    end
+
+    -- Fetch page
+    idx = idx + 1
+    vals[idx] = limit
+    idx = idx + 1
+    vals[idx] = offset
+
+    local data_sql = "SELECT id, username, role, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at, updated_at FROM taguato.users" ..
+                     where .. " ORDER BY id LIMIT $" .. (idx - 1) .. " OFFSET $" .. idx
+
+    local res, err = db.query(data_sql, unpack(vals))
     if not res then
         json.respond(500, { error = "Failed to list users" })
         return
     end
 
-    json.respond(200, { users = res })
+    json.respond(200, {
+        users = res,
+        total = total,
+        page = page,
+        limit = limit,
+        pages = math.ceil(total / limit),
+    })
     return
 end
 

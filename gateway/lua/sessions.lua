@@ -34,8 +34,24 @@ if uri:match("^/admin/sessions") then
         return
     end
 
-    -- GET /admin/sessions - List all active sessions
+    -- GET /admin/sessions - List all active sessions (paginated)
     if method == "GET" and uri == "/admin/sessions" then
+        local args = ngx.req.get_uri_args()
+        local page = tonumber(args.page) or 1
+        local limit = tonumber(args.limit) or 50
+        if limit > 100 then limit = 100 end
+        local offset = (page - 1) * limit
+
+        -- Count total
+        local count_res = db.query(
+            "SELECT COUNT(*) as total FROM taguato.sessions WHERE is_active = true"
+        )
+        local total = 0
+        if count_res and #count_res > 0 then
+            total = tonumber(count_res[1].total) or 0
+        end
+
+        -- Fetch page
         local res, err = db.query([[
             SELECT s.id, s.user_id, u.username, s.ip_address, s.user_agent,
                    s.last_active, s.is_active, s.created_at
@@ -43,12 +59,20 @@ if uri:match("^/admin/sessions") then
             JOIN taguato.users u ON u.id = s.user_id
             WHERE s.is_active = true
             ORDER BY s.last_active DESC
-        ]])
+            LIMIT $1 OFFSET $2
+        ]], limit, offset)
         if not res then
             json.respond(500, { error = "Failed to list sessions" })
             return
         end
-        json.respond(200, { sessions = as_array(res) })
+
+        json.respond(200, {
+            sessions = as_array(res),
+            total = total,
+            page = page,
+            limit = limit,
+            pages = math.ceil(total / limit),
+        })
         return
     end
 
