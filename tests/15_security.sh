@@ -63,8 +63,10 @@ print_section "15d. RATE LIMITING"
 # Create a user with very low rate limit (2 req per 60s window)
 BODY=$(do_post "$BASE/admin/users" \
     '{"username":"ci_rate_user","password":"CiTestPass1","rate_limit":2}' "$ADMIN_TOKEN")
-RATE_TOKEN=$(json_val "$BODY" '.user.api_token')
 RATE_UID=$(json_val "$BODY" '.user.id')
+# Login to get session token
+BODY=$(do_post "$BASE/api/auth/login" '{"username":"ci_rate_user","password":"CiTestPass1"}')
+RATE_TOKEN=$(json_val "$BODY" '.token')
 
 # Send 3 sequential requests to exhaust limit (rate_limit=2), 3rd should fail
 do_get "$BASE/api/templates" "$RATE_TOKEN" > /dev/null

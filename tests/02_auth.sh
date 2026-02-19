@@ -68,8 +68,11 @@ assert_contains "Login with new password works" "token" "$BODY"
 USER1_TOKEN=$(json_val "$BODY" '.token')
 export USER1_TOKEN
 
-# --- Restore original password ---
+# --- Restore original password and re-login ---
 do_put "$BASE/admin/users/$USER1_ID" '{"password":"'"$CI_PASSWORD"'"}' "$ADMIN_TOKEN" > /dev/null
+BODY=$(do_post "$BASE/api/auth/login" '{"username":"ci_user1","password":"'"$CI_PASSWORD"'"}')
+USER1_TOKEN=$(json_val "$BODY" '.token')
+export USER1_TOKEN
 
 # --- Brute force lockout ---
 # Create a temp user for brute force test

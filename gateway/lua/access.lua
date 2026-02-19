@@ -11,10 +11,10 @@ if cb.is_open() then
     return
 end
 
--- Step 1: Authenticate
+-- Step 1: Authenticate via session token
 local db = require "init"
 local json = require "json"
-local cjson = require "cjson"
+local session_auth = require "session_auth"
 
 local token = ngx.req.get_headers()["apikey"]
 
@@ -23,38 +23,10 @@ if not token or token == "" then
     return
 end
 
--- Check auth cache first
-local cache = ngx.shared.auth_cache
-local cached, user
-
-if cache then
-    local cached_json = cache:get("auth:" .. token)
-    if cached_json then
-        local ok, data = pcall(cjson.decode, cached_json)
-        if ok and data then
-            cached = true
-            user = data
-        end
-    end
-end
-
-if not cached then
-    local res, err = db.query(
-        "SELECT id, username, role, max_instances, is_active, rate_limit FROM taguato.users WHERE api_token = $1 LIMIT 1",
-        token
-    )
-
-    if not res or #res == 0 then
-        json.respond(401, { error = "Invalid API token" })
-        return
-    end
-
-    user = res[1]
-
-    -- Cache the result for 10 seconds
-    if cache then
-        cache:set("auth:" .. token, cjson.encode(user), 10)
-    end
+local user, auth_err = session_auth.validate(token)
+if not user then
+    json.respond(401, { error = "Invalid or expired session token" })
+    return
 end
 
 if not user.is_active then

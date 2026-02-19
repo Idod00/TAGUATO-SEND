@@ -10,10 +10,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=helpers/common.sh
 source "$SCRIPT_DIR/helpers/common.sh"
 
-# Resolve admin token
-ADMIN_TOKEN="${ADMIN_TOKEN:-$(grep '^ADMIN_TOKEN=' .env 2>/dev/null | cut -d= -f2)}"
-if [ -z "$ADMIN_TOKEN" ]; then
-    echo "ERROR: ADMIN_TOKEN not set. Export it or add ADMIN_TOKEN=<token> to .env"
+# Resolve admin credentials for login
+ADMIN_USERNAME="${ADMIN_USERNAME:-$(grep '^ADMIN_USERNAME=' .env 2>/dev/null | cut -d= -f2)}"
+ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(grep '^ADMIN_PASSWORD=' .env 2>/dev/null | cut -d= -f2)}"
+if [ -z "$ADMIN_USERNAME" ] || [ -z "$ADMIN_PASSWORD" ]; then
+    echo "ERROR: ADMIN_USERNAME/ADMIN_PASSWORD not set. Export them or add to .env"
+    exit 1
+fi
+
+# Login as admin to get ephemeral session token
+LOGIN_BODY=$(do_post "$BASE/api/auth/login" \
+    '{"username":"'"$ADMIN_USERNAME"'","password":"'"$ADMIN_PASSWORD"'"}')
+ADMIN_TOKEN=$(json_val "$LOGIN_BODY" '.token')
+if [ -z "$ADMIN_TOKEN" ] || [ "$ADMIN_TOKEN" = "null" ]; then
+    echo "ERROR: Admin login failed: $LOGIN_BODY"
     exit 1
 fi
 export ADMIN_TOKEN

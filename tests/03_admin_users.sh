@@ -59,36 +59,38 @@ assert_json_field "Update max_instances to 5" ".user.max_instances" "5" "$BODY"
 # Restore
 do_put "$BASE/admin/users/$USER1_ID" '{"max_instances":3}' "$ADMIN_TOKEN" > /dev/null
 
-# --- Regenerate token ---
+# --- Regenerate token invalidates sessions ---
 OLD_TOKEN="$USER1_TOKEN"
 BODY=$(do_put "$BASE/admin/users/$USER1_ID" '{"regenerate_token":true}' "$ADMIN_TOKEN")
-NEW_TOKEN=$(json_val "$BODY" '.user.api_token')
-TOTAL=$((TOTAL + 1))
-if [ "$NEW_TOKEN" != "$OLD_TOKEN" ] && [ -n "$NEW_TOKEN" ] && [ "$NEW_TOKEN" != "null" ]; then
-    echo -e "  ${GREEN}PASS${NC} Regenerate token changes the token"
-    PASS=$((PASS + 1))
-    USER1_TOKEN="$NEW_TOKEN"
-    export USER1_TOKEN
-else
-    echo -e "  ${RED}FAIL${NC} Regenerate token did not change (old=${OLD_TOKEN:0:8}, new=${NEW_TOKEN:0:8})"
-    FAIL=$((FAIL + 1))
-fi
+assert_not_contains "Regenerate token does not expose api_token" "api_token" "$BODY"
+
+# Old session token should be invalidated (wait for cache expiry)
+sleep 11
+STATUS=$(get_status "$BASE/api/auth/me" "GET" "$OLD_TOKEN")
+assert_status "Old session invalid after regenerate_token -> 401" "401" "$STATUS"
+
+# Re-login to get a new session token
+BODY=$(do_post "$BASE/api/auth/login" '{"username":"ci_user1","password":"'"$CI_PASSWORD"'"}')
+USER1_TOKEN=$(json_val "$BODY" '.token')
+export USER1_TOKEN
 
 # --- User normal cannot access /admin/ ---
 STATUS=$(get_status "$BASE/admin/users" "GET" "$USER1_TOKEN")
 assert_status "Normal user cannot access /admin/ -> 403" "403" "$STATUS"
 
-# --- Deactivate user ---
+# --- Deactivate user (invalidates sessions) ---
 do_put "$BASE/admin/users/$USER1_ID" '{"is_active":false}' "$ADMIN_TOKEN" > /dev/null
 
-STATUS=$(get_status "$BASE/instance/fetchInstances" "GET" "$USER1_TOKEN")
-assert_status "Deactivated user -> 403" "403" "$STATUS"
+# Wait for cache to expire so the invalidated session is recognized
+sleep 11
+STATUS=$(get_status "$BASE/api/auth/me" "GET" "$USER1_TOKEN")
+assert_status "Deactivated user session invalid -> 401" "401" "$STATUS"
 
-BODY=$(do_get "$BASE/instance/fetchInstances" "$USER1_TOKEN")
-assert_contains "Deactivated message" "disabled" "$BODY"
-
-# Reactivate
+# Reactivate and re-login
 do_put "$BASE/admin/users/$USER1_ID" '{"is_active":true}' "$ADMIN_TOKEN" > /dev/null
+BODY=$(do_post "$BASE/api/auth/login" '{"username":"ci_user1","password":"'"$CI_PASSWORD"'"}')
+USER1_TOKEN=$(json_val "$BODY" '.token')
+export USER1_TOKEN
 
 STATUS=$(get_status "$BASE/instance/fetchInstances" "GET" "$USER1_TOKEN")
 assert_status "Reactivated user can access -> 200" "200" "$STATUS"
@@ -108,6 +110,8 @@ assert_status "Deleted user token -> 401" "401" "$STATUS"
 # Recreate ci_user3 for later tests
 BODY=$(do_post "$BASE/admin/users" \
     '{"username":"ci_user3","password":"'"$CI_PASSWORD"'","max_instances":1}' "$ADMIN_TOKEN")
-USER3_TOKEN=$(json_val "$BODY" '.user.api_token')
 USER3_ID=$(json_val "$BODY" '.user.id')
+# Login to get session token
+BODY=$(do_post "$BASE/api/auth/login" '{"username":"ci_user3","password":"'"$CI_PASSWORD"'"}')
+USER3_TOKEN=$(json_val "$BODY" '.token')
 export USER3_TOKEN USER3_ID

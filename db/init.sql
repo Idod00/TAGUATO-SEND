@@ -331,5 +331,6 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON taguato.audit_log(resource_
 CREATE INDEX IF NOT EXISTS idx_scheduled_status ON taguato.scheduled_messages(status);
 CREATE INDEX IF NOT EXISTS idx_scheduled_user_created ON taguato.scheduled_messages(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sessions_active ON taguato.sessions(user_id, is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_sessions_token_active ON taguato.sessions(token_hash, is_active, expires_at) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_incidents_status_created ON taguato.incidents(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_maintenance_status ON taguato.scheduled_maintenances(status);

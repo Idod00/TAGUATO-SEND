@@ -4,6 +4,7 @@
 local db = require "init"
 local json = require "json"
 local validate = require "validate"
+local session_auth = require "session_auth"
 
 -- Verify admin role
 local user = ngx.ctx.user
@@ -116,7 +117,7 @@ if method == "POST" and uri == "/admin/users" then
     local res, ins_err = db.query(
         [[INSERT INTO taguato.users (username, password_hash, role, api_token, max_instances, rate_limit, email, phone_number)
           VALUES ($1, crypt($2, gen_salt('bf')), $3, $4, $5, $6, $7, $8)
-          RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at]],
+          RETURNING id, username, role, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at]],
         username, password, role, token, max_instances, rate_limit_val, email_val, phone_val
     )
 
@@ -151,7 +152,7 @@ end
 -- GET /admin/users - List users
 if method == "GET" and uri == "/admin/users" then
     local res, err = db.query(
-        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at, updated_at FROM taguato.users ORDER BY id"
+        "SELECT id, username, role, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at, updated_at FROM taguato.users ORDER BY id"
     )
 
     if not res then
@@ -166,7 +167,7 @@ end
 -- GET /admin/users/{id} - Get user with instances
 if method == "GET" and user_id then
     local res, err = db.query(
-        "SELECT id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at, updated_at FROM taguato.users WHERE id = $1",
+        "SELECT id, username, role, max_instances, is_active, must_change_password, rate_limit, email, phone_number, created_at, updated_at FROM taguato.users WHERE id = $1",
         user_id
     )
 
@@ -295,7 +296,7 @@ if method == "PUT" and user_id then
 
     local sql = "UPDATE taguato.users SET " .. table.concat(sets, ", ") ..
                 " WHERE id = $" .. idx ..
-                " RETURNING id, username, role, api_token, max_instances, is_active, must_change_password, rate_limit, email, phone_number, updated_at"
+                " RETURNING id, username, role, max_instances, is_active, must_change_password, rate_limit, email, phone_number, updated_at"
 
     -- Use transaction: UPDATE user + audit log
     db.begin()
@@ -313,7 +314,14 @@ if method == "PUT" and user_id then
     pcall(audit.log, user.id, user.username, "user_updated", "user", user_id, body, ngx.var.remote_addr)
 
     db.commit()
-    invalidate_auth_cache()
+
+    -- Invalidate sessions when token regenerated or user deactivated
+    if body.regenerate_token or body.is_active == false then
+        session_auth.invalidate_user(tonumber(user_id))
+    else
+        invalidate_auth_cache()
+    end
+
     json.respond(200, { user = res[1] })
     return
 end

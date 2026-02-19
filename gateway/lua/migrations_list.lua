@@ -112,4 +112,16 @@ return {
             CREATE INDEX IF NOT EXISTS idx_maintenance_status ON taguato.scheduled_maintenances(status);
         ]],
     },
+    {
+        version = 9,
+        name = "ephemeral_session_tokens",
+        sql = [[
+            -- Invalidate all existing sessions (they used api_token hashes, not session tokens)
+            UPDATE taguato.sessions SET is_active = false WHERE is_active = true;
+
+            -- Composite index for session token validation queries
+            CREATE INDEX IF NOT EXISTS idx_sessions_token_active
+                ON taguato.sessions(token_hash, is_active, expires_at) WHERE is_active = true;
+        ]],
+    },
 }

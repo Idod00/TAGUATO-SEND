@@ -835,7 +835,7 @@ const DOCS_DATA = [
             id: 5,
             username: 'nuevo_usuario',
             role: 'user',
-            api_token: 'a1b2c3d4...',
+
             max_instances: 3,
             is_active: true,
             must_change_password: true
@@ -883,7 +883,7 @@ const DOCS_DATA = [
             id: 2,
             username: 'usuario1',
             role: 'user',
-            api_token: 'a1b2c3d4...',
+
             max_instances: 3,
             is_active: true
           },
@@ -896,7 +896,7 @@ const DOCS_DATA = [
         method: 'PUT',
         path: '/admin/users/{id}',
         summary: 'Actualizar usuario',
-        description: 'Actualiza los campos de un usuario. Solo se envian los campos que se desean cambiar. Usar regenerate_token para generar un nuevo API token. El campo rate_limit configura peticiones por minuto (0 o null = sin limite).',
+        description: 'Actualiza los campos de un usuario. Solo se envian los campos que se desean cambiar. Usar regenerate_token para regenerar el token interno e invalidar todas las sesiones del usuario. El campo rate_limit configura peticiones por minuto (0 o null = sin limite).',
         auth: true,
         adminOnly: true,
         params: [
@@ -915,7 +915,7 @@ const DOCS_DATA = [
             id: 2,
             username: 'usuario1',
             role: 'user',
-            api_token: 'a1b2c3d4...',
+
             max_instances: 5,
             is_active: true
           }

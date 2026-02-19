@@ -1,19 +1,14 @@
 -- Panel authentication endpoints
--- POST /api/auth/login - Validate credentials, return token
--- GET /api/auth/me - Return current user profile
--- POST /api/auth/change-password - Change password (clears must_change_password flag)
+-- POST /api/auth/login - Validate credentials, return ephemeral session token
+-- GET /api/auth/me - Return current user profile (sliding window)
+-- POST /api/auth/change-password - Change password (invalidates all sessions)
+-- POST /api/auth/logout - Invalidate current session
+-- POST /api/auth/logout-all - Invalidate all sessions for user
 
 local db = require "init"
 local json = require "json"
 local validate = require "validate"
-
-local function sha256_hex(input)
-    local sha256 = require "resty.sha256"
-    local str = require "resty.string"
-    local sha = sha256:new()
-    sha:update(input)
-    return str.to_hex(sha:final())
-end
+local session_auth = require "session_auth"
 
 local method = ngx.req.get_method()
 local uri = ngx.var.uri
@@ -64,7 +59,7 @@ if method == "POST" and uri == "/api/auth/login" then
     end
 
     local res, err = db.query(
-        [[SELECT id, username, role, api_token, max_instances, must_change_password
+        [[SELECT id, username, role, max_instances, must_change_password
           FROM taguato.users
           WHERE username = $1
             AND password_hash = crypt($2, password_hash)
@@ -98,6 +93,15 @@ if method == "POST" and uri == "/api/auth/login" then
 
     local user = res[1]
 
+    -- Generate ephemeral session token (random bytes, never stored raw)
+    local token_res = db.query("SELECT encode(gen_random_bytes(32), 'hex') as token")
+    if not token_res or #token_res == 0 then
+        json.respond(500, { error = "Failed to generate session token" })
+        return
+    end
+    local raw_token = token_res[1].token
+    local token_hash = session_auth.sha256_hex(raw_token)
+
     -- Audit log
     local audit = require "audit"
     audit.log(user.id, user.username, "user_login", "session", nil, nil, ngx.var.remote_addr)
@@ -105,7 +109,6 @@ if method == "POST" and uri == "/api/auth/login" then
     -- Create session record (24h TTL)
     local ip = ngx.var.remote_addr or "unknown"
     local ua = ngx.req.get_headers()["User-Agent"] or "unknown"
-    local token_hash = sha256_hex(user.api_token)
     db.query(
         [[INSERT INTO taguato.sessions (user_id, token_hash, ip_address, user_agent, expires_at)
           VALUES ($1, $2, $3, $4, NOW() + INTERVAL '24 hours')]],
@@ -113,7 +116,7 @@ if method == "POST" and uri == "/api/auth/login" then
     )
 
     json.respond(200, {
-        token = user.api_token,
+        token = raw_token,
         user = {
             id = user.id,
             username = user.username,
@@ -133,52 +136,19 @@ if method == "GET" and uri == "/api/auth/me" then
         return
     end
 
-    local res, err = db.query(
-        [[SELECT u.id, u.username, u.role, u.max_instances, u.is_active, u.must_change_password, u.email, u.phone_number, u.created_at
-          FROM taguato.users u
-          WHERE u.api_token = $1
-          LIMIT 1]],
-        token
-    )
-
-    if not res or #res == 0 then
-        json.respond(401, { error = "Invalid API token" })
+    local user, auth_err = session_auth.validate(token)
+    if not user then
+        json.respond(401, { error = "Invalid or expired session token" })
         return
     end
 
-    local user = res[1]
     if not user.is_active then
         json.respond(403, { error = "Account is disabled" })
         return
     end
 
-    -- Check session expiration (panel sessions only)
-    local token_hash = sha256_hex(token)
-    local sess = db.query(
-        [[SELECT id, expires_at FROM taguato.sessions
-          WHERE token_hash = $1 AND user_id = $2 AND is_active = true
-          ORDER BY created_at DESC LIMIT 1]],
-        token_hash, user.id
-    )
-    if sess and #sess > 0 then
-        -- Check if session has expired
-        local expired = db.query(
-            "SELECT ($1::timestamp < NOW()) as expired", sess[1].expires_at
-        )
-        if expired and #expired > 0 and expired[1].expired then
-            -- Deactivate expired session
-            db.query("UPDATE taguato.sessions SET is_active = false WHERE id = $1", sess[1].id)
-            json.respond(401, { error = "Session expired, please login again" })
-            return
-        end
-        -- Extend session: update last_active and push expires_at forward
-        db.query(
-            [[UPDATE taguato.sessions
-              SET last_active = NOW(), expires_at = NOW() + INTERVAL '24 hours'
-              WHERE id = $1]],
-            sess[1].id
-        )
-    end
+    -- Sliding window: extend session expiry
+    session_auth.touch(user.session_id)
 
     -- Fetch user instances
     local instances, _ = db.query(
@@ -210,6 +180,12 @@ if method == "POST" and uri == "/api/auth/change-password" then
         return
     end
 
+    local user, auth_err = session_auth.validate(token)
+    if not user then
+        json.respond(401, { error = "Invalid or expired session token" })
+        return
+    end
+
     local body, err = json.read_body()
     if not body then
         json.respond(400, { error = "Invalid JSON body" })
@@ -230,22 +206,20 @@ if method == "POST" and uri == "/api/auth/change-password" then
         return
     end
 
-    -- Verify current password
+    -- Verify current password by user_id
     local res, err = db.query(
         [[SELECT id FROM taguato.users
-          WHERE api_token = $1
+          WHERE id = $1
             AND password_hash = crypt($2, password_hash)
             AND is_active = true
           LIMIT 1]],
-        token, current_password
+        user.id, current_password
     )
 
     if not res or #res == 0 then
         json.respond(401, { error = "Current password is incorrect" })
         return
     end
-
-    local user_id = res[1].id
 
     -- Update password and clear the flag
     local upd, err = db.query(
@@ -254,7 +228,7 @@ if method == "POST" and uri == "/api/auth/change-password" then
               must_change_password = false,
               updated_at = NOW()
           WHERE id = $2]],
-        new_password, user_id
+        new_password, user.id
     )
 
     if not upd then
@@ -263,11 +237,11 @@ if method == "POST" and uri == "/api/auth/change-password" then
     end
 
     -- Invalidate all active sessions for this user
-    db.query("UPDATE taguato.sessions SET is_active = false WHERE user_id = $1", user_id)
+    session_auth.invalidate_user(user.id)
 
     -- Audit log
     local audit = require "audit"
-    audit.log(user_id, nil, "password_changed", "user", nil, nil, ngx.var.remote_addr)
+    audit.log(user.id, nil, "password_changed", "user", nil, nil, ngx.var.remote_addr)
 
     json.respond(200, { message = "Password changed successfully. Please login again." })
     return
@@ -281,29 +255,18 @@ if method == "POST" and uri == "/api/auth/logout" then
         return
     end
 
-    local token_hash = sha256_hex(token)
-
-    -- Find the user for this token
-    local user_res = db.query(
-        "SELECT id, username FROM taguato.users WHERE api_token = $1 AND is_active = true LIMIT 1",
-        token
-    )
-    if not user_res or #user_res == 0 then
-        json.respond(401, { error = "Invalid API token" })
+    local user, auth_err = session_auth.validate(token)
+    if not user then
+        json.respond(401, { error = "Invalid or expired session token" })
         return
     end
 
-    -- Deactivate the current session
-    local sess = db.query(
-        [[UPDATE taguato.sessions SET is_active = false
-          WHERE token_hash = $1 AND user_id = $2 AND is_active = true
-          RETURNING id]],
-        token_hash, user_res[1].id
-    )
+    -- Invalidate the current session by its token_hash
+    session_auth.invalidate_by_hash(user.token_hash)
 
     -- Audit log
     local audit = require "audit"
-    pcall(audit.log, user_res[1].id, user_res[1].username, "user_logout", "session", nil, nil, ngx.var.remote_addr)
+    pcall(audit.log, user.id, user.username, "user_logout", "session", nil, nil, ngx.var.remote_addr)
 
     json.respond(200, { message = "Logged out successfully" })
     return
@@ -317,23 +280,17 @@ if method == "POST" and uri == "/api/auth/logout-all" then
         return
     end
 
-    local user_res = db.query(
-        "SELECT id, username FROM taguato.users WHERE api_token = $1 AND is_active = true LIMIT 1",
-        token
-    )
-    if not user_res or #user_res == 0 then
-        json.respond(401, { error = "Invalid API token" })
+    local user, auth_err = session_auth.validate(token)
+    if not user then
+        json.respond(401, { error = "Invalid or expired session token" })
         return
     end
 
-    -- Deactivate all sessions for this user
-    db.query(
-        "UPDATE taguato.sessions SET is_active = false WHERE user_id = $1 AND is_active = true",
-        user_res[1].id
-    )
+    -- Invalidate all sessions for this user
+    session_auth.invalidate_user(user.id)
 
     local audit = require "audit"
-    pcall(audit.log, user_res[1].id, user_res[1].username, "user_logout_all", "session", nil, nil, ngx.var.remote_addr)
+    pcall(audit.log, user.id, user.username, "user_logout_all", "session", nil, nil, ngx.var.remote_addr)
 
     json.respond(200, { message = "All sessions logged out successfully" })
     return

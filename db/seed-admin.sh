@@ -33,6 +33,5 @@ EOSQL
 echo "============================================"
 echo "TAGUATO-SEND Admin User Created"
 echo "Username: $ADMIN_USER"
-echo "API Token: $TOKEN"
-echo "Save this token! It is your admin API key."
+echo "Login with your credentials to get a session token."
 echo "============================================"
