@@ -136,3 +136,36 @@ USER3_ID=$(json_val "$BODY" '.user.id')
 BODY=$(do_post "$BASE/api/auth/login" '{"username":"ci_user3","password":"'"$CI_PASSWORD"'"}')
 USER3_TOKEN=$(json_val "$BODY" '.token')
 export USER3_TOKEN USER3_ID
+
+# --- Admin reset-password ---
+
+# Nonexistent user -> 404
+STATUS=$(get_status "$BASE/admin/users/99999/reset-password" "POST" "$ADMIN_TOKEN")
+assert_status "Reset password nonexistent user -> 404" "404" "$STATUS"
+
+# User without email -> 400
+STATUS=$(get_status "$BASE/admin/users/$USER1_ID/reset-password" "POST" "$ADMIN_TOKEN")
+assert_status "Reset password no email -> 400" "400" "$STATUS"
+
+BODY=$(do_post "$BASE/admin/users/$USER1_ID/reset-password" '' "$ADMIN_TOKEN")
+assert_contains "Reset no email error message" "no email" "$BODY"
+
+# Normal user cannot access -> 403
+STATUS=$(get_status "$BASE/admin/users/$USER1_ID/reset-password" "POST" "$USER1_TOKEN")
+assert_status "Normal user reset-password -> 403" "403" "$STATUS"
+
+# User with email -> 200 (if SMTP configured) or 400 (SMTP not configured)
+do_put "$BASE/admin/users/$USER1_ID" '{"email":"ci_test@example.com"}' "$ADMIN_TOKEN" > /dev/null
+STATUS=$(get_status "$BASE/admin/users/$USER1_ID/reset-password" "POST" "$ADMIN_TOKEN")
+# Accept either 200 (SMTP configured) or 400 (SMTP not configured in CI)
+TOTAL=$((TOTAL + 1))
+if [ "$STATUS" = "200" ] || [ "$STATUS" = "400" ]; then
+    echo -e "  ${GREEN}PASS${NC} Reset password with email -> $STATUS (expected 200 or 400)"
+    PASS=$((PASS + 1))
+else
+    echo -e "  ${RED}FAIL${NC} Reset password with email -> $STATUS (expected 200 or 400)"
+    FAIL=$((FAIL + 1))
+fi
+
+# Clean up email
+do_put "$BASE/admin/users/$USER1_ID" '{"email":""}' "$ADMIN_TOKEN" > /dev/null

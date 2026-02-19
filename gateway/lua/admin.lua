@@ -230,6 +230,79 @@ if method == "GET" and user_id then
     return
 end
 
+-- POST /admin/users/{id}/reset-password - Send reset email
+local reset_user_id = uri:match("^/admin/users/(%d+)/reset%-password$")
+if method == "POST" and reset_user_id then
+    -- Lookup user
+    local target = db.query(
+        "SELECT id, username, email FROM taguato.users WHERE id = $1",
+        reset_user_id
+    )
+    if not target or #target == 0 then
+        json.respond(404, { error = "User not found" })
+        return
+    end
+    local target_user = target[1]
+
+    if not target_user.email or target_user.email == "" then
+        json.respond(400, { error = "User has no email configured" })
+        return
+    end
+
+    local smtp = require "smtp"
+    if not smtp.is_configured() then
+        json.respond(400, { error = "SMTP is not configured" })
+        return
+    end
+
+    -- Invalidate previous unused reset codes
+    db.query(
+        [[UPDATE taguato.password_resets SET used_at = NOW()
+          WHERE user_id = $1 AND used_at IS NULL]],
+        reset_user_id
+    )
+
+    -- Generate 6-digit code
+    local code_res = db.query(
+        "SELECT LPAD(FLOOR(RANDOM()*1000000)::int::text, 6, '0') as code"
+    )
+    local code = code_res and code_res[1] and code_res[1].code
+    if not code then
+        json.respond(500, { error = "Failed to generate reset code" })
+        return
+    end
+
+    -- Store reset record
+    local insert_res = db.query(
+        [[INSERT INTO taguato.password_resets (user_id, reset_code, method)
+          VALUES ($1, $2, 'admin_email')
+          RETURNING id]],
+        reset_user_id, code
+    )
+    if not insert_res or #insert_res == 0 then
+        json.respond(500, { error = "Failed to create reset record" })
+        return
+    end
+
+    -- Send email
+    local email_templates = require "email_templates"
+    local subject, text, html = email_templates.admin_reset_code(code, user.username)
+    local send_ok, send_err = smtp.send(target_user.email, subject, text, html)
+    if not send_ok then
+        ngx.log(ngx.ERR, "admin reset-password: email send failed: ", send_err)
+        json.respond(500, { error = "Failed to send reset email" })
+        return
+    end
+
+    -- Audit log
+    local audit = require "audit"
+    pcall(audit.log, user.id, user.username, "admin_password_reset", "user",
+        tostring(reset_user_id), { target_username = target_user.username }, ngx.var.remote_addr)
+
+    json.respond(200, { message = "Reset email sent to user" })
+    return
+end
+
 -- PUT /admin/users/{id} - Update user
 if method == "PUT" and user_id then
     local body, err = json.read_body()

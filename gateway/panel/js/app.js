@@ -1839,6 +1839,7 @@ const App = (() => {
               <td>${u.is_active ? 'Si' : 'No'}</td>
               <td>
                 <button class="btn btn-sm btn-secondary" onclick="App.editUser(${u.id}, '${esc(u.username)}', '${u.role}', ${u.max_instances}, ${u.is_active}, ${u.rate_limit || 'null'})">Editar</button>
+                <button class="btn btn-sm btn-warning" onclick="App.adminResetPassword(${u.id}, '${esc(u.username).replace(/'/g, "\\'")}')">Reset Pass</button>
                 ${u.id !== currentUser.id ? `<button class="btn btn-sm btn-danger" onclick="App.confirmDeleteUser(${u.id}, '${esc(u.username)}')">Eliminar</button>` : ''}
               </td>
             </tr>`).join('')}
@@ -1918,6 +1919,16 @@ const App = (() => {
       loadUsers();
     } catch (err) {
       showToast(err.message || 'Error al eliminar', 'error');
+    }
+  }
+
+  async function adminResetPassword(id, username) {
+    if (!confirm('Enviar email de recuperacion a ' + username + '?')) return;
+    try {
+      await API.adminResetPassword(id);
+      showToast('Email de recuperacion enviado');
+    } catch (err) {
+      showToast(err.message || 'Error al enviar email', 'error');
     }
   }
 
@@ -2639,6 +2650,7 @@ const App = (() => {
     showAuditDetail,
     editUser,
     confirmDeleteUser,
+    adminResetPassword,
     openIncidentUpdate,
     confirmDeleteIncident,
     startMaintenance,

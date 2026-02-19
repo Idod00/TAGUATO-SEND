@@ -335,6 +335,10 @@ const API = (() => {
     return await request('DELETE', '/admin/users/' + id);
   }
 
+  async function adminResetPassword(id) {
+    return await request('POST', '/admin/users/' + id + '/reset-password');
+  }
+
   // Status & Incidents
   async function getPublicStatus() {
     const res = await fetch('/api/status');
@@ -413,7 +417,7 @@ const API = (() => {
     exportHistoryCSV,
     getAuditLogs, listBackups, createBackup,
     getUserDashboard, getDashboard,
-    listUsers, createUser, updateUser, deleteUser,
+    listUsers, createUser, updateUser, deleteUser, adminResetPassword,
     getPublicStatus, listIncidents, listIncidentServices,
     createIncident, addIncidentUpdate, updateIncident, deleteIncident,
     listMaintenances, createMaintenance, updateMaintenance, deleteMaintenance,
