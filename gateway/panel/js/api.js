@@ -62,6 +62,18 @@ const API = (() => {
     clearSession();
   }
 
+  async function forgotPassword(identifier) {
+    return await request('POST', '/api/auth/forgot-password', { username: identifier });
+  }
+
+  async function verifyResetCode(identifier, code) {
+    return await request('POST', '/api/auth/verify-reset-code', { username: identifier, code });
+  }
+
+  async function resetPassword(resetToken, newPassword) {
+    return await request('POST', '/api/auth/reset-password', { reset_token: resetToken, new_password: newPassword });
+  }
+
   // Instances
   async function fetchInstances() {
     return await request('GET', '/instance/fetchInstances');
@@ -321,9 +333,11 @@ const API = (() => {
     return await request('GET', '/admin/users');
   }
 
-  async function createUser(username, password, role, maxInstances, rateLimit) {
+  async function createUser(username, password, role, maxInstances, rateLimit, email, phoneNumber) {
     const body = { username, password, role, max_instances: maxInstances };
     if (rateLimit !== null && rateLimit !== undefined) body.rate_limit = rateLimit;
+    if (email) body.email = email;
+    if (phoneNumber) body.phone_number = phoneNumber;
     return await request('POST', '/admin/users', body);
   }
 
@@ -403,7 +417,7 @@ const API = (() => {
 
   return {
     getToken, getStoredUser, setSession, clearSession,
-    login, logout, getProfile, changePassword,
+    login, logout, getProfile, changePassword, forgotPassword, verifyResetCode, resetPassword,
     fetchInstances, createInstance, deleteInstance, connectInstance, getInstanceStatus,
     logoutInstance, restartInstance, getInstanceStats,
     sendText, sendMedia, sendBulkText, cancelBulk,

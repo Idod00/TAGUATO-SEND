@@ -32,6 +32,9 @@
         </div>
         <button type="submit" id="login-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Ingresar</button>
       </form>
+      <div style="text-align:center;margin-top:0.75rem;">
+        <button type="button" id="forgot-password-link" class="btn-link">Olvidaste tu contrasena?</button>
+      </div>
     </div>
   </div>
 
@@ -56,6 +59,62 @@
         </div>
         <button type="submit" id="cp-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Cambiar Contrasena</button>
       </form>
+    </div>
+  </div>
+
+  <!-- Recovery Screen -->
+  <div id="recovery-screen" class="hidden">
+    <div class="login-box">
+      <img src="/panel/img/logo.png" alt="TAGUATO" class="login-logo">
+      <h1>Recuperar Contrasena</h1>
+
+      <!-- Step 1: Enter username/email -->
+      <div id="recovery-step1">
+        <p class="subtitle">Ingresa tu usuario o email para recibir un codigo de recuperacion</p>
+        <form id="recovery-step1-form">
+          <div class="form-group">
+            <label for="recovery-identifier">Usuario o Email</label>
+            <input type="text" id="recovery-identifier" class="form-control" autocomplete="username" required>
+          </div>
+          <button type="submit" id="recovery-step1-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Enviar codigo</button>
+        </form>
+        <div style="text-align:center;margin-top:0.75rem;">
+          <button type="button" class="btn-link recovery-back-login">Volver al login</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Enter code -->
+      <div id="recovery-step2" class="hidden">
+        <p class="subtitle">Ingresa el codigo de 6 digitos que recibiste</p>
+        <form id="recovery-step2-form">
+          <div class="form-group">
+            <label for="recovery-code">Codigo de verificacion</label>
+            <input type="text" id="recovery-code" class="form-control" maxlength="6" pattern="[0-9]{6}" placeholder="000000" autocomplete="one-time-code" required>
+          </div>
+          <button type="submit" id="recovery-step2-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Verificar codigo</button>
+        </form>
+        <div style="text-align:center;margin-top:0.75rem;display:flex;justify-content:center;gap:1rem;">
+          <button type="button" id="recovery-resend-btn" class="btn-link">Reenviar codigo</button>
+          <button type="button" class="btn-link recovery-back-login">Volver al login</button>
+        </div>
+      </div>
+
+      <!-- Step 3: New password -->
+      <div id="recovery-step3" class="hidden">
+        <p class="subtitle">Ingresa tu nueva contrasena</p>
+        <form id="recovery-step3-form">
+          <div class="form-group">
+            <label for="recovery-new-pass">Nueva contrasena</label>
+            <input type="password" id="recovery-new-pass" class="form-control" autocomplete="new-password" required minlength="8">
+          </div>
+          <div class="form-group">
+            <label for="recovery-confirm-pass">Confirmar contrasena</label>
+            <input type="password" id="recovery-confirm-pass" class="form-control" autocomplete="new-password" required minlength="8">
+          </div>
+          <button type="submit" id="recovery-step3-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Cambiar contrasena</button>
+        </form>
+      </div>
+
     </div>
   </div>
 
@@ -477,6 +536,14 @@
             <label for="new-user-rate">Rate limit (req/s)</label>
             <input type="number" id="new-user-rate" class="form-control" placeholder="Sin limite" min="0">
           </div>
+          <div class="form-group">
+            <label for="new-user-email">Email</label>
+            <input type="email" id="new-user-email" class="form-control" placeholder="usuario@ejemplo.com">
+          </div>
+          <div class="form-group">
+            <label for="new-user-phone">Telefono</label>
+            <input type="text" id="new-user-phone" class="form-control" placeholder="595981123456">
+          </div>
           <div class="form-group full-width">
             <button type="submit" class="btn btn-primary">Crear Usuario</button>
           </div>
@@ -666,6 +733,14 @@
         <div class="form-group checkbox-group">
           <input type="checkbox" id="edit-user-active">
           <label for="edit-user-active">Activo</label>
+        </div>
+        <div class="form-group">
+          <label for="edit-user-email">Email</label>
+          <input type="email" id="edit-user-email" class="form-control" placeholder="usuario@ejemplo.com">
+        </div>
+        <div class="form-group">
+          <label for="edit-user-phone">Telefono</label>
+          <input type="text" id="edit-user-phone" class="form-control" placeholder="595981123456">
         </div>
         <div class="form-group">
           <label for="edit-user-pass">Nueva contrasena (dejar vacio para no cambiar)</label>
