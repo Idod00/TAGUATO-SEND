@@ -201,11 +201,8 @@ function _M.handle()
         -- Send the code
         local send_ok, send_err
         if delivery_method == "email" then
-            local subject = "Password Recovery Code"
-            local text = "Your password recovery code is: " .. code .. "\n\nThis code expires in 15 minutes. If you did not request this, ignore this email."
-            local html = "<p>Your password recovery code is: <strong>" .. code .. "</strong></p>"
-                .. "<p>This code expires in 15 minutes.</p>"
-                .. "<p>If you did not request this, ignore this email.</p>"
+            local email_templates = require "email_templates"
+            local subject, text, html = email_templates.recovery_code(code)
             send_ok, send_err = smtp.send(found_user.email, subject, text, html)
         else
             send_ok, send_err = send_whatsapp(found_user.phone_number, code)

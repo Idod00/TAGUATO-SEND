@@ -130,6 +130,7 @@ const App = (() => {
   function showLogin() {
     hide($('#app'));
     hide($('#change-password-screen'));
+    hide($('#recovery-screen'));
     show($('#login-screen'));
     $('#login-user').value = '';
     $('#login-pass').value = '';
@@ -178,9 +179,124 @@ const App = (() => {
     }
   }
 
+  // --- Recovery Flow ---
+  let _recoveryIdentifier = '';
+  let _recoveryResetToken = '';
+
+  function showRecovery() {
+    hide($('#login-screen'));
+    hide($('#app'));
+    hide($('#change-password-screen'));
+    show($('#recovery-screen'));
+    showRecoveryStep(1);
+    _recoveryIdentifier = '';
+    _recoveryResetToken = '';
+  }
+
+  function showRecoveryStep(step) {
+    hide($('#recovery-step1'));
+    hide($('#recovery-step2'));
+    hide($('#recovery-step3'));
+    show($('#recovery-step' + step));
+    if (step === 1) {
+      $('#recovery-identifier').value = '';
+      $('#recovery-identifier').focus();
+    } else if (step === 2) {
+      $('#recovery-code').value = '';
+      $('#recovery-code').focus();
+    } else if (step === 3) {
+      $('#recovery-new-pass').value = '';
+      $('#recovery-confirm-pass').value = '';
+      $('#recovery-new-pass').focus();
+    }
+  }
+
+  async function handleForgotPassword(e) {
+    e.preventDefault();
+    const identifier = $('#recovery-identifier').value.trim();
+    if (!identifier) return;
+    const btn = $('#recovery-step1-btn');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+    try {
+      await API.forgotPassword(identifier);
+      _recoveryIdentifier = identifier;
+      showToast('Codigo enviado. Revisa tu email o WhatsApp.');
+      showRecoveryStep(2);
+    } catch (err) {
+      showToast(err.message || 'Error al enviar codigo', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Enviar codigo';
+    }
+  }
+
+  async function handleVerifyCode(e) {
+    e.preventDefault();
+    const code = $('#recovery-code').value.trim();
+    if (!code) return;
+    const btn = $('#recovery-step2-btn');
+    btn.disabled = true;
+    btn.textContent = 'Verificando...';
+    try {
+      const data = await API.verifyResetCode(_recoveryIdentifier, code);
+      _recoveryResetToken = data.reset_token;
+      showToast('Codigo verificado');
+      showRecoveryStep(3);
+    } catch (err) {
+      showToast(err.message || 'Codigo invalido', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Verificar codigo';
+    }
+  }
+
+  async function handleResendCode() {
+    const btn = $('#recovery-resend-btn');
+    btn.disabled = true;
+    btn.textContent = 'Reenviando...';
+    try {
+      await API.forgotPassword(_recoveryIdentifier);
+      showToast('Codigo reenviado');
+    } catch (err) {
+      showToast(err.message || 'Error al reenviar', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Reenviar codigo';
+    }
+  }
+
+  async function handleResetPassword(e) {
+    e.preventDefault();
+    const newPass = $('#recovery-new-pass').value;
+    const confirmPass = $('#recovery-confirm-pass').value;
+    if (newPass !== confirmPass) {
+      showToast('Las contrasenas no coinciden', 'error');
+      return;
+    }
+    if (newPass.length < 8) {
+      showToast('La contrasena debe tener min 8 caracteres', 'error');
+      return;
+    }
+    const btn = $('#recovery-step3-btn');
+    btn.disabled = true;
+    btn.textContent = 'Cambiando...';
+    try {
+      await API.resetPassword(_recoveryResetToken, newPass);
+      showToast('Contrasena cambiada exitosamente. Inicia sesion.');
+      showLogin();
+    } catch (err) {
+      showToast(err.message || 'Error al cambiar contrasena', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Cambiar contrasena';
+    }
+  }
+
   function showApp() {
     hide($('#login-screen'));
     hide($('#change-password-screen'));
+    hide($('#recovery-screen'));
     show($('#app'));
     $('#user-display').textContent = currentUser.username;
 
@@ -1825,7 +1941,7 @@ const App = (() => {
       <table class="table">
         <thead>
           <tr>
-            <th>ID</th><th>Usuario</th><th>Rol</th><th>Max Inst.</th><th>Rate Limit</th><th>Activo</th><th>Acciones</th>
+            <th>ID</th><th>Usuario</th><th>Rol</th><th>Max Inst.</th><th>Rate Limit</th><th>Email</th><th>Telefono</th><th>Activo</th><th>Acciones</th>
           </tr>
         </thead>
         <tbody>
@@ -1836,9 +1952,12 @@ const App = (() => {
               <td><span class="badge badge-${u.role === 'admin' ? 'admin' : 'user'}">${u.role}</span></td>
               <td>${u.max_instances}</td>
               <td>${u.rate_limit ? u.rate_limit + '/s' : '-'}</td>
+              <td>${u.email ? esc(u.email) : '-'}</td>
+              <td>${u.phone_number ? esc(u.phone_number) : '-'}</td>
               <td>${u.is_active ? 'Si' : 'No'}</td>
               <td>
-                <button class="btn btn-sm btn-secondary" onclick="App.editUser(${u.id}, '${esc(u.username)}', '${u.role}', ${u.max_instances}, ${u.is_active}, ${u.rate_limit || 'null'})">Editar</button>
+                <button class="btn btn-sm btn-secondary" onclick="App.editUser(${u.id}, '${esc(u.username)}', '${u.role}', ${u.max_instances}, ${u.is_active}, ${u.rate_limit || 'null'}, '${esc(u.email || '')}', '${esc(u.phone_number || '')}')">Editar</button>
+                <button class="btn btn-sm btn-warning" onclick="App.adminResetPassword(${u.id}, '${esc(u.username).replace(/'/g, "\\'")}')">Reset Pass</button>
                 ${u.id !== currentUser.id ? `<button class="btn btn-sm btn-danger" onclick="App.confirmDeleteUser(${u.id}, '${esc(u.username)}')">Eliminar</button>` : ''}
               </td>
             </tr>`).join('')}
@@ -1854,30 +1973,36 @@ const App = (() => {
     const maxInst = parseInt($('#new-user-max').value) || 1;
     const rateVal = $('#new-user-rate').value.trim();
     const rateLimit = rateVal ? parseInt(rateVal) : null;
+    const email = $('#new-user-email').value.trim();
+    const phoneNumber = $('#new-user-phone').value.trim();
     if (!username || !password) {
       showToast('Username y password son requeridos', 'error');
       return;
     }
     try {
-      await API.createUser(username, password, role, maxInst, rateLimit);
+      await API.createUser(username, password, role, maxInst, rateLimit, email || null, phoneNumber || null);
       showToast('Usuario creado');
       $('#new-user-name').value = '';
       $('#new-user-pass').value = '';
       $('#new-user-max').value = '1';
       $('#new-user-rate').value = '';
+      $('#new-user-email').value = '';
+      $('#new-user-phone').value = '';
       loadUsers();
     } catch (err) {
       showToast(err.message || 'Error al crear usuario', 'error');
     }
   }
 
-  function editUser(id, username, role, maxInstances, isActive, rateLimit) {
+  function editUser(id, username, role, maxInstances, isActive, rateLimit, email, phoneNumber) {
     const modal = $('#edit-user-modal');
     $('#edit-user-id').value = id;
     $('#edit-user-title').textContent = 'Editar: ' + username;
     $('#edit-user-role').value = role;
     $('#edit-user-max').value = maxInstances;
     $('#edit-user-rate').value = rateLimit || '';
+    $('#edit-user-email').value = email || '';
+    $('#edit-user-phone').value = phoneNumber || '';
     $('#edit-user-active').checked = isActive;
     $('#edit-user-pass').value = '';
     show(modal);
@@ -1892,6 +2017,8 @@ const App = (() => {
       max_instances: parseInt($('#edit-user-max').value) || 1,
       is_active: $('#edit-user-active').checked,
       rate_limit: rateVal ? parseInt(rateVal) : null,
+      email: $('#edit-user-email').value.trim() || '',
+      phone_number: $('#edit-user-phone').value.trim() || '',
     };
     const newPass = $('#edit-user-pass').value.trim();
     if (newPass) fields.password = newPass;
@@ -1918,6 +2045,16 @@ const App = (() => {
       loadUsers();
     } catch (err) {
       showToast(err.message || 'Error al eliminar', 'error');
+    }
+  }
+
+  async function adminResetPassword(id, username) {
+    if (!confirm('Enviar email de recuperacion a ' + username + '?')) return;
+    try {
+      await API.adminResetPassword(id);
+      showToast('Email de recuperacion enviado');
+    } catch (err) {
+      showToast(err.message || 'Error al enviar email', 'error');
     }
   }
 
@@ -2531,6 +2668,14 @@ const App = (() => {
     // Event listeners
     on('#login-form', 'submit', handleLogin);
     on('#change-password-form', 'submit', handleChangePassword);
+    on('#forgot-password-link', 'click', showRecovery);
+    on('#recovery-step1-form', 'submit', handleForgotPassword);
+    on('#recovery-step2-form', 'submit', handleVerifyCode);
+    on('#recovery-step3-form', 'submit', handleResetPassword);
+    on('#recovery-resend-btn', 'click', handleResendCode);
+    $$('.recovery-back-login').forEach(btn => {
+      btn.addEventListener('click', showLogin);
+    });
     on('#create-instance-form', 'submit', handleCreateInstance);
     on('#send-message-form', 'submit', handleSendMessage);
     on('#bulk-message-form', 'submit', handleBulkMessage);
@@ -2639,6 +2784,7 @@ const App = (() => {
     showAuditDetail,
     editUser,
     confirmDeleteUser,
+    adminResetPassword,
     openIncidentUpdate,
     confirmDeleteIncident,
     startMaintenance,
