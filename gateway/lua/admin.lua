@@ -3,8 +3,17 @@
 
 local db = require "init"
 local json = require "json"
+local cjson = require "cjson"
 local validate = require "validate"
 local session_auth = require "session_auth"
+
+local empty_array_mt = cjson.empty_array_mt
+local function as_array(t)
+    if t == nil or (type(t) == "table" and #t == 0) then
+        return setmetatable({}, empty_array_mt)
+    end
+    return t
+end
 
 -- Verify admin role
 local user = ngx.ctx.user
@@ -196,7 +205,7 @@ if method == "GET" and uri == "/admin/users" then
     end
 
     json.respond(200, {
-        users = res,
+        users = as_array(res),
         total = total,
         page = page,
         limit = limit,
