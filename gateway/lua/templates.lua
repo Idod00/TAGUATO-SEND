@@ -3,7 +3,16 @@
 
 local db = require "init"
 local json = require "json"
+local cjson = require "cjson"
 local validate = require "validate"
+
+local empty_array_mt = cjson.empty_array_mt
+local function as_array(t)
+    if t == nil or (type(t) == "table" and #t == 0) then
+        return setmetatable({}, empty_array_mt)
+    end
+    return t
+end
 
 local user = ngx.ctx.user
 if not user then
@@ -45,7 +54,7 @@ if method == "GET" and uri == "/api/templates" then
     end
 
     json.respond(200, {
-        templates = res,
+        templates = as_array(res),
         total = total,
         page = page,
         limit = limit,
