@@ -1,9 +1,9 @@
 -- External alerting via webhook (Slack, Discord, Teams, generic)
 -- Sends notifications when services go down or circuit breaker opens.
 -- Configure via env: ALERT_WEBHOOK_URL, ALERT_COOLDOWN_SECONDS
--- Uses os.execute + curl for HTTPS support (resty.http lacks openssl in this image)
 
 local cjson = require "cjson"
+local http = require "resty.http"
 
 local _M = {}
 
@@ -31,28 +31,33 @@ local function check_cooldown(key, cooldown)
     return true
 end
 
--- Send webhook payload via curl (handles HTTPS, fire-and-forget)
+-- Send webhook payload via resty.http (safe — no shell involved)
 local function send_webhook(url, payload)
     local json_body = cjson.encode(payload)
-    -- Escape single quotes in JSON for shell safety
-    json_body = json_body:gsub("'", "'\\''")
-    local cmd = string.format(
-        "curl -s -o /dev/null -w '%%{http_code}' -X POST -H 'Content-Type: application/json' -d '%s' --max-time 10 '%s' 2>/dev/null",
-        json_body, url
-    )
-    local handle = io.popen(cmd)
-    if handle then
-        local status = handle:read("*a")
-        handle:close()
-        local code = tonumber(status)
-        if code and code >= 400 then
-            ngx.log(ngx.ERR, "alerting: webhook returned HTTP ", status)
-            return false
-        end
-        return true
+
+    local httpc = http.new()
+    httpc:set_timeout(10000)
+
+    local res, err = httpc:request_uri(url, {
+        method = "POST",
+        headers = {
+            ["Content-Type"] = "application/json",
+        },
+        body = json_body,
+        ssl_verify = false,
+    })
+
+    if not res then
+        ngx.log(ngx.ERR, "alerting: webhook request failed: ", err)
+        return false
     end
-    ngx.log(ngx.ERR, "alerting: failed to execute curl")
-    return false
+
+    if res.status >= 400 then
+        ngx.log(ngx.ERR, "alerting: webhook returned HTTP ", res.status)
+        return false
+    end
+
+    return true
 end
 
 -- Public: send a service down alert
