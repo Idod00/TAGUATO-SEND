@@ -48,22 +48,31 @@ Todo se despliega con un solo comando via Docker Compose. Incluye un panel web c
 ### Multi-tenant
 - **Aislamiento por usuario** &mdash; Cada usuario solo ve y opera sus propias instancias
 - **Limite de instancias** &mdash; Configurable por usuario (`max_instances`)
-- **Rate limiting** &mdash; Global y por usuario, configurable
-- **Tokens unicos** &mdash; Cada usuario tiene su propio API token
+- **Rate limiting** &mdash; Global y por usuario via Redis (atomico, configurable por usuario)
+- **Sesiones efimeras** &mdash; Tokens de sesion con TTL de 24h y sliding window (reemplazan api_token permanente)
+
+### Seguridad y Autenticacion
+- **Recuperacion de contrasena** &mdash; Via email (SMTP) o WhatsApp, con codigos de 6 digitos y expiracion de 15 min
+- **Logout / Logout-all** &mdash; Invalida la sesion actual o todas las sesiones del usuario
+- **Proteccion SSRF** &mdash; Webhooks validados contra IPs privadas y rangos reservados
+- **Brute-force protection** &mdash; Bloqueo automatico tras 5 intentos fallidos de login
 
 ### Administracion
 - **Dashboard** &mdash; Metricas en tiempo real: usuarios, instancias, uptime
-- **Gestion de usuarios** &mdash; CRUD completo con roles (admin/user)
-- **Auditoria** &mdash; Log de todas las acciones administrativas con filtros
-- **Backups** &mdash; Creacion de backups de PostgreSQL desde el panel
+- **Gestion de usuarios** &mdash; CRUD completo con roles (admin/user), email y telefono
+- **Reset de contrasena** &mdash; Admin puede forzar reset y enviar nueva contrasena por email
+- **Auditoria** &mdash; Log de todas las acciones administrativas con filtros por fecha, accion, usuario y recurso
+- **Backups y Restore** &mdash; Creacion y restauracion de backups de PostgreSQL desde el panel y via script
 - **Sesiones** &mdash; Ver y revocar sesiones activas de cualquier usuario
 
-### Monitoreo
+### Monitoreo y Alertas
 - **Pagina de estado publica** &mdash; Muestra salud de los 4 servicios en tiempo real
+- **Alertas externas** &mdash; Notificaciones via webhook (Slack, Discord, Teams) cuando un servicio cae o se recupera
+- **Circuit breaker** &mdash; Proteccion automatica contra cascada de fallos con alertas
 - **Auto-reconexion** &mdash; Worker que detecta instancias desconectadas y las reconecta automaticamente
 - **Incidentes** &mdash; Creacion y seguimiento con timeline de updates
 - **Mantenimientos programados** &mdash; Notificacion publica de ventanas de mantenimiento
-- **Uptime tracking** &mdash; Registro historico de disponibilidad
+- **Uptime tracking** &mdash; Registro historico de disponibilidad con graficos de 30 dias
 
 ### Panel Web
 - **Responsive** &mdash; Funciona en desktop y mobile
@@ -211,10 +220,32 @@ El panel web permite gestionar todo el sistema desde el navegador. Accesible en 
 
 ## API REST
 
-Todos los endpoints requieren autenticacion via header:
+### Autenticacion
+
+La autenticacion usa sesiones efimeras. Primero obtene un token via login:
+
+```bash
+# Login (obtener token de sesion)
+curl -X POST http://localhost/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "tu_password"}'
+# Respuesta: { "token": "abc123...", "user": { ... } }
+```
+
+Usa el token en el header `apikey` para los demas endpoints:
 
 ```
-apikey: <tu_token>
+apikey: <token_de_sesion>
+```
+
+```bash
+# Cerrar sesion
+curl -X POST http://localhost/api/auth/logout -H "apikey: TOKEN"
+
+# Recuperar contrasena (envia codigo por email o WhatsApp)
+curl -X POST http://localhost/api/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"username": "mi_usuario"}'
 ```
 
 ### Instancias
@@ -268,16 +299,34 @@ curl http://localhost/api/scheduled -H "apikey: TOKEN"
 curl -X DELETE http://localhost/api/scheduled/1 -H "apikey: TOKEN"
 ```
 
+### Webhooks
+
+```bash
+# Crear webhook para una instancia
+curl -X POST http://localhost/api/webhooks \
+  -H "apikey: TOKEN" -H "Content-Type: application/json" \
+  -d '{"instance_name": "mi-whatsapp", "webhook_url": "https://mi-server.com/hook", "events": ["messages.upsert"]}'
+
+# Actualizar webhook
+curl -X PUT http://localhost/api/webhooks/1 \
+  -H "apikey: TOKEN" -H "Content-Type: application/json" \
+  -d '{"webhook_url": "https://nuevo-server.com/hook"}'
+```
+
 ### Administracion (requiere role=admin)
 
 ```bash
-# Crear usuario
+# Crear usuario (password: min 8 chars, 1 mayuscula, 1 minuscula, 1 numero)
 curl -X POST http://localhost/admin/users \
   -H "apikey: ADMIN_TOKEN" -H "Content-Type: application/json" \
-  -d '{"username": "empresa1", "password": "secreto123", "max_instances": 3}'
+  -d '{"username": "empresa1", "password": "Empresa1Pass", "max_instances": 3}'
 
-# Listar usuarios
-curl http://localhost/admin/users -H "apikey: ADMIN_TOKEN"
+# Listar usuarios (paginado)
+curl "http://localhost/admin/users?page=1&limit=50" -H "apikey: ADMIN_TOKEN"
+
+# Reset de contrasena (admin envia nueva clave por email)
+curl -X POST http://localhost/admin/users/2/reset-password \
+  -H "apikey: ADMIN_TOKEN"
 ```
 
 > Consulta la documentacion completa en el panel: **API Docs**
@@ -309,7 +358,8 @@ curl http://localhost/admin/users -H "apikey: ADMIN_TOKEN"
 | Gateway | **OpenResty** (nginx + LuaJIT) | Proxy reverso, auth, rate limiting, panel, workers |
 | WhatsApp | **Evolution API** v2.3.7 | Motor de WhatsApp via Baileys |
 | Base de datos | **PostgreSQL** 15 + pgcrypto | Usuarios, instancias, logs, templates, contactos |
-| Cache | **Redis** | Cache de sesiones WhatsApp |
+| Cache | **Redis** | Cache de auth, rate limiting, sesiones WhatsApp |
+| Email | **lua-resty-mail** | Envio de emails para recovery via SMTP |
 | DB Driver | **pgmoon** | Conexion PostgreSQL desde Lua (async) |
 | HTTP Client | **lua-resty-http** | Requests internos desde workers |
 | Contenedores | **Docker Compose** | Orquestacion de los 4 servicios |
@@ -322,27 +372,39 @@ curl http://localhost/admin/users -H "apikey: ADMIN_TOKEN"
 TAGUATO-SEND/
 ├── docker-compose.yml            # Orquestacion de servicios
 ├── .env.example                  # Template de variables de entorno
+├── CONTRIBUTING.md               # Guia de contribucion
 ├── db/
-│   ├── init.sql                  # Schema completo (12 tablas)
+│   ├── init.sql                  # Schema completo (19+ tablas)
 │   └── seed-admin.sh             # Seed del usuario admin
 ├── gateway/
-│   ├── Dockerfile                # OpenResty alpine + pgmoon
+│   ├── Dockerfile                # OpenResty alpine + pgmoon + resty-http + resty-mail
 │   ├── nginx.conf                # Rutas, proxy, workers
 │   ├── lua/
-│   │   ├── init.lua              # Pool de conexiones PostgreSQL
+│   │   ├── init.lua              # Pool de conexiones PostgreSQL + Redis
 │   │   ├── json.lua              # Helpers JSON
-│   │   ├── auth.lua              # Middleware de autenticacion
+│   │   ├── validate.lua          # Validaciones (username, password, phone, webhook URL)
+│   │   ├── session_auth.lua      # Autenticacion por sesion efimera
+│   │   ├── auth.lua              # Middleware de autenticacion (API token)
 │   │   ├── access.lua            # Auth + filtro de instancias
-│   │   ├── admin.lua             # CRUD de usuarios
+│   │   ├── rate_limit.lua        # Rate limiting atomico via Redis
+│   │   ├── panel_auth.lua        # Login, logout, recovery, change-password
+│   │   ├── recovery.lua          # Recuperacion de contrasena (email + WhatsApp)
+│   │   ├── smtp.lua              # Envio de emails via SMTP
+│   │   ├── email_templates.lua   # Plantillas HTML de emails
+│   │   ├── admin.lua             # CRUD de usuarios + reset de contrasena
 │   │   ├── templates.lua         # CRUD de plantillas
 │   │   ├── contacts.lua          # CRUD de listas de contactos
 │   │   ├── scheduled.lua         # CRUD de envios programados
+│   │   ├── webhooks.lua          # CRUD de webhooks (con SSRF protection)
 │   │   ├── sessions.lua          # Gestion de sesiones
-│   │   ├── message_log.lua       # Registro de mensajes
-│   │   ├── audit.lua             # Log de auditoria
+│   │   ├── message_log.lua       # Registro y export CSV de mensajes
+│   │   ├── audit.lua             # Log de auditoria con filtros por fecha
+│   │   ├── alerting.lua          # Alertas externas via webhook
+│   │   ├── circuit_breaker.lua   # Circuit breaker para Evolution API
+│   │   ├── migrations_list.lua   # Lista de migraciones de DB
 │   │   ├── scheduled_worker.lua  # Worker de envios programados
 │   │   ├── reconnect_worker.lua  # Worker de auto-reconexion
-│   │   ├── uptime_worker.lua     # Worker de monitoreo
+│   │   ├── uptime_worker.lua     # Worker de monitoreo + alertas
 │   │   └── ...
 │   └── panel/
 │       ├── index.html            # SPA del panel
@@ -357,7 +419,12 @@ TAGUATO-SEND/
 │   ├── start.sh                  # Iniciar servicios
 │   ├── stop.sh                   # Detener servicios
 │   ├── logs.sh                   # Ver logs
-│   └── backup-db.sh              # Backup de DB
+│   ├── backup-db.sh              # Backup de DB con verificacion de integridad
+│   └── restore-db.sh             # Restaurar backup de DB
+├── tests/
+│   ├── run_all.sh                # Runner de tests de integracion (248 assertions)
+│   ├── helpers/                  # Funciones compartidas de test
+│   └── 01_health.sh ... 17_multi_tenant.sh  # 17 suites de test
 └── docs/
     └── changes/                  # Historial de cambios por feature
 ```
@@ -371,20 +438,26 @@ TAGUATO-SEND/
 ./scripts/stop.sh                     # Detener todos los servicios
 ./scripts/logs.sh                     # Ver logs de todos los servicios
 ./scripts/logs.sh taguato-gateway     # Ver logs solo del gateway
-./scripts/backup-db.sh               # Crear backup de PostgreSQL
+./scripts/backup-db.sh               # Crear backup de PostgreSQL (con verificacion)
+./scripts/restore-db.sh              # Restaurar backup (seleccion interactiva)
+bash tests/run_all.sh                # Ejecutar suite de tests de integracion
 ```
 
 ---
 
 ## Workers en Background
 
-TAGUATO-SEND ejecuta 3 workers automaticos en el gateway:
+TAGUATO-SEND ejecuta varios workers automaticos en el gateway:
 
 | Worker | Intervalo | Funcion |
 |--------|-----------|---------|
-| **Uptime Check** | 5 min | Monitorea salud de los 4 servicios |
+| **Uptime Check** | 5 min | Monitorea salud de los 4 servicios + alertas externas |
 | **Auto-Reconnect** | 3 min | Detecta y reconecta instancias desconectadas |
 | **Scheduled Messages** | 1 min | Ejecuta envios programados pendientes |
+| **Cleanup** | 1 hora | Limpieza de webhooks inactivos y datos expirados |
+| **Backup** | 24 horas | Backup automatico de PostgreSQL (configurable via `BACKUP_INTERVAL`) |
+| **Migrate** | Startup | Aplica migraciones de DB pendientes al iniciar |
+| **Log Rotate** | 24 horas | Rotacion de logs internos |
 
 ---
 
@@ -396,6 +469,7 @@ TAGUATO-SEND ejecuta 3 workers automaticos en el gateway:
 | API Docs (interactivo) | Panel > API Docs |
 | Pagina de estado | `http://localhost/status/` |
 | Swagger (admin) | `http://localhost/docs` |
+| Guia de contribucion | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Historial de cambios | [`docs/changes/`](docs/changes/) |
 
 ---
@@ -411,6 +485,16 @@ Las variables de entorno se configuran en `.env` (ver [`.env.example`](.env.exam
 | `ADMIN_PASSWORD` | Contrasena admin inicial |
 | `AUTHENTICATION_API_KEY` | Clave interna gateway-API |
 | `POSTGRES_PASSWORD` | Contrasena de PostgreSQL |
+| `CORS_ORIGIN` | Origen permitido para CORS (default: `*`) |
+| `SMTP_HOST` | Servidor SMTP para recuperacion de contrasena |
+| `SMTP_PORT` | Puerto SMTP (default: 587) |
+| `SMTP_USER` | Usuario SMTP |
+| `SMTP_PASSWORD` | Contrasena SMTP |
+| `SMTP_FROM` | Direccion de remitente de emails |
+| `RECOVERY_ADMIN_INSTANCE` | Instancia WhatsApp para enviar codigos de recovery |
+| `ALERT_WEBHOOK_URL` | URL del webhook para alertas externas (Slack, Discord, etc.) |
+| `ALERT_COOLDOWN_SECONDS` | Cooldown entre alertas repetidas (default: 300) |
+| `BACKUP_INTERVAL` | Intervalo de backup automatico en horas (default: 24) |
 
 ---
 
