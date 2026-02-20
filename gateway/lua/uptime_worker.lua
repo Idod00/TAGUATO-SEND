@@ -71,7 +71,7 @@ function _M.check()
         if res then
             pg_status = "operational"
         end
-        pg:keepalive(10000, 10)
+        -- Don't keepalive here: we reuse this connection for inserts below
     else
         log.warn("uptime_worker", "PostgreSQL connect failed", { error = pg_err })
     end
