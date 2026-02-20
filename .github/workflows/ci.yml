@@ -156,6 +156,9 @@ jobs:
           sed -i "s|taguato:CHANGE_ME_USE_STRONG_PASSWORD@|taguato:ci_pg_pass_456@|g" .env
           sed -i "s|CHANGE_ME_REDIS_PASSWORD|ci_redis_pass_789|g" .env
 
+          # Enable CORS for testing (default is disabled for security)
+          echo "GATEWAY_CORS_ORIGIN=*" >> .env
+
           echo "Generated .env for CI"
 
       - name: Start services
@@ -193,24 +196,10 @@ jobs:
           # Extra wait for DB init scripts to complete
           sleep 5
 
-      - name: Extract admin token
-        id: admin-token
-        run: |
-          TOKEN=$(docker compose logs taguato-postgres 2>/dev/null | grep "API Token:" | tail -1 | sed 's/.*API Token: //' | tr -d '[:space:]')
-          if [ -z "$TOKEN" ]; then
-            echo "ERROR: Could not extract admin token from postgres logs"
-            docker compose logs taguato-postgres --tail=30
-            exit 1
-          fi
-          echo "Admin token extracted (${TOKEN:0:8}...)"
-          echo "ADMIN_TOKEN=$TOKEN" >> "$GITHUB_OUTPUT"
-
       - name: Install jq
         run: sudo apt-get install -y jq
 
       - name: Run integration tests
-        env:
-          ADMIN_TOKEN: ${{ steps.admin-token.outputs.ADMIN_TOKEN }}
         run: |
           chmod +x tests/run_all.sh
           bash tests/run_all.sh
