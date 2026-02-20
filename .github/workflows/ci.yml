@@ -156,6 +156,9 @@ jobs:
           sed -i "s|taguato:CHANGE_ME_USE_STRONG_PASSWORD@|taguato:ci_pg_pass_456@|g" .env
           sed -i "s|CHANGE_ME_REDIS_PASSWORD|ci_redis_pass_789|g" .env
 
+          # Enable CORS for testing (default is disabled for security)
+          echo "GATEWAY_CORS_ORIGIN=*" >> .env
+
           echo "Generated .env for CI"
 
       - name: Start services
