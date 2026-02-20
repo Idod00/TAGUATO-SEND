@@ -34,3 +34,19 @@ assert_status "Audit POST -> 405" "405" "$STATUS"
 # --- Previous test actions appear in audit ---
 BODY=$(do_get "$BASE/admin/audit?limit=100" "$ADMIN_TOKEN")
 assert_contains "Audit contains user_created action" "user_created" "$BODY"
+
+# --- Filter by date_from ---
+BODY=$(do_get "$BASE/admin/audit?date_from=2020-01-01" "$ADMIN_TOKEN")
+assert_json_count "date_from=2020 returns results" ".logs" 1 "$BODY"
+
+# --- Filter by date_to in the past ---
+BODY=$(do_get "$BASE/admin/audit?date_to=2020-01-01" "$ADMIN_TOKEN")
+assert_json_field "date_to=2020 returns 0 results" ".total" "0" "$BODY"
+
+# --- Combined date range ---
+BODY=$(do_get "$BASE/admin/audit?date_from=2020-01-01&date_to=2099-12-31" "$ADMIN_TOKEN")
+assert_json_count "date range 2020-2099 has results" ".logs" 1 "$BODY"
+
+# --- Combined date + action filter ---
+BODY=$(do_get "$BASE/admin/audit?action=user_created&date_from=2020-01-01" "$ADMIN_TOKEN")
+assert_json_count "date + action filter has results" ".logs" 1 "$BODY"
