@@ -11,7 +11,7 @@ local function check_shared_dict(user_id, limit)
     end
 
     local key = "rl:" .. user_id
-    local newval, err = dict:incr(key, 1, 0, 1)
+    local newval, err = dict:incr(key, 1, 0, 60)
     if not newval then
         ngx.log(ngx.WARN, "rate_limit: shared dict incr failed: ", err)
         return true
@@ -41,7 +41,7 @@ function _M.check(user_id, limit)
         end
         return current
     ]]
-    local current, err = red:eval(script, 1, key, 1)
+    local current, err = red:eval(script, 1, key, 60)
     if not current then
         red:set_keepalive(10000, 10)
         ngx.log(ngx.WARN, "rate_limit: redis eval failed, using shared dict fallback: ", err)

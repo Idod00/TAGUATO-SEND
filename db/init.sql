@@ -305,7 +305,7 @@ CREATE TABLE IF NOT EXISTS taguato.password_resets (
     user_id INT NOT NULL REFERENCES taguato.users(id) ON DELETE CASCADE,
     reset_code VARCHAR(6) NOT NULL,
     reset_token VARCHAR(64),
-    method VARCHAR(10) DEFAULT 'email' CHECK (method IN ('email', 'whatsapp')),
+    method VARCHAR(20) DEFAULT 'email' CHECK (method IN ('email', 'whatsapp', 'admin_email')),
     attempts INT DEFAULT 0,
     expires_at TIMESTAMP NOT NULL DEFAULT (NOW() + INTERVAL '15 minutes'),
     used_at TIMESTAMP,

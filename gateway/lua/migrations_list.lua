@@ -124,4 +124,14 @@ return {
                 ON taguato.sessions(token_hash, is_active, expires_at) WHERE is_active = true;
         ]],
     },
+    {
+        version = 10,
+        name = "password_resets_allow_admin_email",
+        sql = [[
+            ALTER TABLE taguato.password_resets DROP CONSTRAINT IF EXISTS password_resets_method_check;
+            ALTER TABLE taguato.password_resets ALTER COLUMN method TYPE VARCHAR(20);
+            ALTER TABLE taguato.password_resets ADD CONSTRAINT password_resets_method_check
+                CHECK (method IN ('email', 'whatsapp', 'admin_email'));
+        ]],
+    },
 }

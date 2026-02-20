@@ -3,7 +3,20 @@
 -- POST /api/auth/verify-reset-code - Verify code, get reset_token
 -- POST /api/auth/reset-password   - Reset password with reset_token
 
+local bit = require "bit"
+
 local _M = {}
+
+-- Constant-time string comparison to prevent timing attacks
+local function constant_time_compare(a, b)
+    if type(a) ~= "string" or type(b) ~= "string" then return false end
+    if #a ~= #b then return false end
+    local result = 0
+    for i = 1, #a do
+        result = bit.bor(result, bit.bxor(string.byte(a, i), string.byte(b, i)))
+    end
+    return result == 0
+end
 
 -- Rate limit helper: max N requests per key per window (seconds) using Redis
 -- Uses atomic Lua script to avoid race conditions between get+incr
@@ -290,8 +303,8 @@ function _M.handle()
             reset.id
         )
 
-        -- Check the code
-        if reset.reset_code ~= code then
+        -- Check the code (constant-time to prevent timing attacks)
+        if not constant_time_compare(reset.reset_code, code) then
             json.respond(400, { error = "Invalid code or expired" })
             return
         end
