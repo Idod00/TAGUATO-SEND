@@ -24,6 +24,8 @@ services:
       - SMTP_FROM=${SMTP_FROM:-}
       - SMTP_SECURE=${SMTP_SECURE:-tls}
       - RECOVERY_ADMIN_INSTANCE=${RECOVERY_ADMIN_INSTANCE:-}
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
+      - ALERT_COOLDOWN_SECONDS=${ALERT_COOLDOWN_SECONDS:-300}
     volumes:
       - ./backups:/backups
       - evolution_instances:/evolution_instances:ro

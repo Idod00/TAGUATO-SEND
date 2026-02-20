@@ -139,6 +139,25 @@ function _M.check()
     insert_pg:query("DELETE FROM taguato.uptime_checks WHERE checked_at < NOW() - INTERVAL '90 days'")
 
     insert_pg:keepalive(10000, 10)
+
+    -- External alerting: compare with previous state
+    local alert_ok, alerting = pcall(require, "alerting")
+    if alert_ok then
+        local prev = ngx.shared.alert_cooldown
+        if prev then
+            for _, r in ipairs(results) do
+                local prev_key = "prev_status:" .. r.name
+                local prev_status = prev:get(prev_key)
+                if prev_status and prev_status == "operational" and r.status ~= "operational" then
+                    alerting.service_down(r.name, r.status)
+                elseif prev_status and prev_status ~= "operational" and r.status == "operational" then
+                    alerting.service_recovered(r.name)
+                end
+                prev:set(prev_key, r.status)
+            end
+        end
+    end
+
     log.info("uptime_worker", "check completed, 4 services recorded")
 end
 
