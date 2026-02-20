@@ -25,6 +25,15 @@ docker compose exec -T taguato-postgres pg_dump \
 echo "Backup saved to: $BACKUP_FILE"
 echo "Size: $(du -h "$BACKUP_FILE" | cut -f1)"
 
+# Verify backup integrity
+echo "Verifying backup integrity..."
+if gunzip -t "$BACKUP_FILE" 2>/dev/null; then
+    echo "Integrity check: OK"
+else
+    echo "ERROR: Backup verification failed! File may be corrupted."
+    exit 1
+fi
+
 # Create weekly backup on Sundays
 if [ "$DAY_OF_WEEK" -eq 7 ]; then
     WEEKLY_FILE="${BACKUP_DIR}/taguato_weekly_${TIMESTAMP}.sql.gz"
