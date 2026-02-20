@@ -32,27 +32,48 @@ local function check_cooldown(key, cooldown)
 end
 
 -- Send webhook payload via curl (handles HTTPS, fire-and-forget)
+-- Uses temp file for JSON body to avoid shell injection via io.popen
 local function send_webhook(url, payload)
     local json_body = cjson.encode(payload)
-    -- Escape single quotes in JSON for shell safety
-    json_body = json_body:gsub("'", "'\\''")
+
+    -- Write JSON to temp file (avoids shell metacharacter issues entirely)
+    local tmpfile = os.tmpname()
+    local f = io.open(tmpfile, "w")
+    if not f then
+        ngx.log(ngx.ERR, "alerting: failed to create temp file")
+        return false
+    end
+    f:write(json_body)
+    f:close()
+
+    -- Validate URL: only allow http(s) schemes to prevent injection via URL
+    if not url:match("^https?://") then
+        os.remove(tmpfile)
+        ngx.log(ngx.ERR, "alerting: invalid webhook URL scheme")
+        return false
+    end
+
     local cmd = string.format(
-        "curl -s -o /dev/null -w '%%{http_code}' -X POST -H 'Content-Type: application/json' -d '%s' --max-time 10 '%s' 2>/dev/null",
-        json_body, url
+        "curl -s -o /dev/null -w '%%{http_code}' -X POST -H 'Content-Type: application/json' -d '@%s' --max-time 10 '%s' 2>/dev/null",
+        tmpfile, url
     )
     local handle = io.popen(cmd)
+    local ok = false
     if handle then
         local status = handle:read("*a")
         handle:close()
         local code = tonumber(status)
         if code and code >= 400 then
             ngx.log(ngx.ERR, "alerting: webhook returned HTTP ", status)
-            return false
+        else
+            ok = true
         end
-        return true
+    else
+        ngx.log(ngx.ERR, "alerting: failed to execute curl")
     end
-    ngx.log(ngx.ERR, "alerting: failed to execute curl")
-    return false
+
+    os.remove(tmpfile)
+    return ok
 end
 
 -- Public: send a service down alert
