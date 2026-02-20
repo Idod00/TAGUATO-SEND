@@ -37,6 +37,9 @@ function _M.record_failure()
     if new_val >= THRESHOLD then
         dict:set(OPEN_UNTIL_KEY, ngx.now() + RESET_TIME)
         ngx.log(ngx.WARN, "circuit breaker OPEN: ", new_val, " consecutive upstream failures")
+        -- External alert
+        local ok, alerting = pcall(require, "alerting")
+        if ok then alerting.circuit_breaker_open(new_val) end
     end
 end
 
