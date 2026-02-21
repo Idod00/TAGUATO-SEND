@@ -1,0 +1,15 @@
+# Gitleaks configuration - allowlist false positives
+# Docs, tests, and example files contain placeholder values that are not real secrets.
+
+[allowlist]
+  description = "Allow placeholder values in docs, tests, and examples"
+
+  paths = [
+    '''README\.md''',
+    '''CONTRIBUTING\.md''',
+    '''docs/.*''',
+    '''tests/.*''',
+    '''test\.sh''',
+    '''\.env\.example''',
+    '''gateway/panel/js/docs-data\.js''',
+  ]
