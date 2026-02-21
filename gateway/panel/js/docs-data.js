@@ -101,6 +101,75 @@ const DOCS_DATA = [
         response: {
           message: 'Password updated successfully'
         }
+      },
+      {
+        method: 'POST',
+        path: '/api/auth/logout',
+        summary: 'Cerrar sesion actual',
+        description: 'Cierra la sesion actual del usuario. El token de sesion queda invalidado.',
+        auth: true,
+        response: {
+          message: 'Logged out successfully'
+        }
+      },
+      {
+        method: 'POST',
+        path: '/api/auth/logout-all',
+        summary: 'Cerrar todas las sesiones',
+        description: 'Cierra todas las sesiones activas del usuario. Util si sospechas que tu cuenta fue comprometida.',
+        auth: true,
+        response: {
+          message: 'All sessions closed',
+          sessions_closed: 3
+        }
+      },
+      {
+        method: 'POST',
+        path: '/api/auth/forgot-password',
+        summary: 'Solicitar codigo de recuperacion',
+        description: 'Envia un codigo de 6 digitos al email o WhatsApp del usuario. Siempre retorna 200 para prevenir enumeracion de usuarios. Rate limit: 3 por hora por IP.',
+        auth: false,
+        body: {
+          username: 'mi_usuario'
+        },
+        response: {
+          message: 'If the account exists, a recovery code has been sent.'
+        }
+      },
+      {
+        method: 'POST',
+        path: '/api/auth/verify-reset-code',
+        summary: 'Verificar codigo de recuperacion',
+        description: 'Verifica el codigo de 6 digitos enviado al usuario. Si es correcto, retorna un reset_token para el siguiente paso. Maximo 5 intentos.',
+        auth: false,
+        body: {
+          username: 'mi_usuario',
+          code: '123456'
+        },
+        response: {
+          reset_token: 'a1b2c3d4e5f6...'
+        },
+        errors: [
+          { status: 400, description: 'Invalid code or expired' },
+          { status: 400, description: 'Too many attempts. Please request a new code.' }
+        ]
+      },
+      {
+        method: 'POST',
+        path: '/api/auth/reset-password',
+        summary: 'Resetear contrasena con token',
+        description: 'Cambia la contrasena usando el reset_token obtenido en el paso anterior. Invalida todas las sesiones del usuario.',
+        auth: false,
+        body: {
+          reset_token: 'a1b2c3d4e5f6...',
+          new_password: 'nueva_contrasena_segura'
+        },
+        response: {
+          message: 'Password has been reset successfully. Please login with your new password.'
+        },
+        errors: [
+          { status: 400, description: 'Invalid or expired reset token' }
+        ]
       }
     ]
   },
@@ -728,6 +797,30 @@ const DOCS_DATA = [
         ]
       },
       {
+        method: 'PUT',
+        path: '/api/webhooks/{id}',
+        summary: 'Actualizar webhook',
+        description: 'Actualiza la URL y/o eventos de un webhook existente. Se actualiza automaticamente en la Evolution API.',
+        auth: true,
+        params: [
+          { name: 'id', in: 'path', required: true, description: 'ID del webhook' }
+        ],
+        body: {
+          webhook_url: 'https://nuevo-servidor.com/webhook',
+          events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE']
+        },
+        response: {
+          webhook: {
+            id: 1,
+            instance_name: 'mi-instancia',
+            webhook_url: 'https://nuevo-servidor.com/webhook',
+            events: ['MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
+            is_active: true,
+            updated_at: '2025-01-16T12:00:00Z'
+          }
+        }
+      },
+      {
         method: 'DELETE',
         path: '/api/webhooks/{id}',
         summary: 'Eliminar webhook',
@@ -1275,7 +1368,9 @@ const DOCS_DATA = [
           { name: 'limit', in: 'query', required: false, description: 'Resultados por pagina (default: 50, max: 100)' },
           { name: 'action', in: 'query', required: false, description: 'Filtrar por accion: user_login, user_created, instance_created, backup_created, incident_created, etc.' },
           { name: 'username', in: 'query', required: false, description: 'Filtrar por nombre de usuario' },
-          { name: 'resource_type', in: 'query', required: false, description: 'Filtrar por tipo de recurso: user, instance, session, backup, incident, maintenance' }
+          { name: 'resource_type', in: 'query', required: false, description: 'Filtrar por tipo de recurso: user, instance, session, backup, incident, maintenance' },
+          { name: 'date_from', in: 'query', required: false, description: 'Fecha inicio (ISO 8601, ej: 2025-01-01)' },
+          { name: 'date_to', in: 'query', required: false, description: 'Fecha fin (ISO 8601, ej: 2025-01-31)' }
         ],
         response: {
           logs: [
