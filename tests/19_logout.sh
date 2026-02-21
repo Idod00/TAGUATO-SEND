@@ -24,7 +24,6 @@ assert_status "Token invalid after logout -> 401" "401" "$STATUS"
 # --- Login again works after logout ---
 BODY=$(do_post "$BASE/api/auth/login" '{"username":"ci_user1","password":"'"$CI_PASSWORD"'"}')
 assert_contains "Login after logout works" "token" "$BODY"
-POST_LOGOUT_TOKEN=$(json_val "$BODY" '.token')
 
 # --- Logout-all ---
 # Create multiple sessions
