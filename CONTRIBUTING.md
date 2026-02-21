@@ -17,6 +17,21 @@ docker compose up -d --build
 
 The panel is available at `http://localhost`. Default admin credentials are in `.env` (`ADMIN_USERNAME` / `ADMIN_PASSWORD`).
 
+## Authentication
+
+TAGUATO-SEND uses **ephemeral session tokens** (not permanent API tokens). The auth flow is:
+
+1. `POST /api/auth/login` with `username` + `password` → returns a session `token`
+2. Use `apikey: <token>` header on all subsequent requests
+3. Sessions expire after 24 hours of inactivity (sliding window)
+4. `POST /api/auth/logout` invalidates the current session
+5. `POST /api/auth/logout-all` invalidates all sessions for the user
+
+Password recovery (if SMTP or WhatsApp is configured):
+1. `POST /api/auth/forgot-password` → sends a 6-digit code via email/WhatsApp
+2. `POST /api/auth/verify-reset-code` → verifies the code, returns a `reset_token`
+3. `POST /api/auth/reset-password` → sets a new password using the `reset_token`
+
 ## Branch Conventions
 
 Always create a feature branch from `main`. Never push directly to `main`.
@@ -72,7 +87,7 @@ docker compose up -d
 ./tests/run_all.sh
 ```
 
-Tests are bash scripts in `tests/` using curl + jq. The suite creates temporary users (`ci_user1`, `ci_user2`, `ci_user3`) and cleans up after itself.
+Tests are bash scripts in `tests/` using curl + jq. The suite creates temporary users (`ci_user1`, `ci_user2`, `ci_user3`), logs in to get session tokens (via `helpers/setup.sh`), and cleans up after itself.
 
 ### Run a single test file
 
@@ -91,7 +106,8 @@ source tests/helpers/teardown.sh
 
 ```lua
 {
-    name = "YYYYMMDD_description",
+    version = N,  -- increment from the last migration
+    name = "short_description",
     sql = [[
         -- Your SQL here
         CREATE TABLE taguato.new_table (...);

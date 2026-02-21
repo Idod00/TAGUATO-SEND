@@ -49,14 +49,21 @@ Todo se despliega con un solo comando via Docker Compose. Incluye un panel web c
 - **Aislamiento por usuario** &mdash; Cada usuario solo ve y opera sus propias instancias
 - **Limite de instancias** &mdash; Configurable por usuario (`max_instances`)
 - **Rate limiting** &mdash; Global y por usuario, configurable
-- **Tokens unicos** &mdash; Cada usuario tiene su propio API token
+- **Sesiones efimeras** &mdash; Login con username/password, tokens de sesion con TTL de 24h (sliding window)
+
+### Seguridad
+- **Recuperacion de contrasena** &mdash; Flujo de 3 pasos via email (SMTP) o WhatsApp
+- **Proteccion brute-force** &mdash; Bloqueo de cuenta tras intentos fallidos
+- **Circuit breaker** &mdash; Proteccion automatica contra fallos en cascada del upstream
+- **Alertas externas** &mdash; Notificaciones via webhook (Slack, Discord, Teams) cuando un servicio cae
 
 ### Administracion
 - **Dashboard** &mdash; Metricas en tiempo real: usuarios, instancias, uptime
-- **Gestion de usuarios** &mdash; CRUD completo con roles (admin/user)
-- **Auditoria** &mdash; Log de todas las acciones administrativas con filtros
-- **Backups** &mdash; Creacion de backups de PostgreSQL desde el panel
+- **Gestion de usuarios** &mdash; CRUD completo con roles (admin/user), email y telefono
+- **Auditoria** &mdash; Log de todas las acciones administrativas con filtros por fecha
+- **Backups** &mdash; Creacion y restauracion de backups de PostgreSQL desde el panel
 - **Sesiones** &mdash; Ver y revocar sesiones activas de cualquier usuario
+- **Reset de contrasena** &mdash; Admin puede resetear la contrasena de cualquier usuario via email
 
 ### Monitoreo
 - **Pagina de estado publica** &mdash; Muestra salud de los 4 servicios en tiempo real
@@ -64,6 +71,7 @@ Todo se despliega con un solo comando via Docker Compose. Incluye un panel web c
 - **Incidentes** &mdash; Creacion y seguimiento con timeline de updates
 - **Mantenimientos programados** &mdash; Notificacion publica de ventanas de mantenimiento
 - **Uptime tracking** &mdash; Registro historico de disponibilidad
+- **Alertas webhook** &mdash; Notificaciones automaticas de caida/recuperacion de servicios
 
 ### Panel Web
 - **Responsive** &mdash; Funciona en desktop y mobile
@@ -166,12 +174,9 @@ cp .env.example .env
 
 # 3. Levantar servicios
 ./scripts/start.sh
-
-# 4. Obtener el token del admin (primera vez)
-docker compose logs taguato-postgres | grep "API Token"
 ```
 
-> **Nota:** Guarda el token del admin, es tu clave de acceso para el panel y la API.
+> **Nota:** Las credenciales del admin se configuran en `.env` (`ADMIN_USERNAME` / `ADMIN_PASSWORD`). Usalas para iniciar sesion en el panel.
 
 ### Acceder al panel
 
@@ -211,10 +216,20 @@ El panel web permite gestionar todo el sistema desde el navegador. Accesible en 
 
 ## API REST
 
-Todos los endpoints requieren autenticacion via header:
+La autenticacion usa sesiones efimeras. Primero hace login para obtener un token de sesion:
+
+```bash
+# Login → obtener token de sesion
+curl -X POST http://localhost/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "tu_usuario", "password": "tu_contrasena"}'
+# Respuesta: { "token": "abc123...", "user": { ... } }
+```
+
+Luego usa el token en el header `apikey`:
 
 ```
-apikey: <tu_token>
+apikey: <session_token>
 ```
 
 ### Instancias
@@ -323,7 +338,7 @@ TAGUATO-SEND/
 ├── docker-compose.yml            # Orquestacion de servicios
 ├── .env.example                  # Template de variables de entorno
 ├── db/
-│   ├── init.sql                  # Schema completo (12 tablas)
+│   ├── init.sql                  # Schema completo (20+ tablas)
 │   └── seed-admin.sh             # Seed del usuario admin
 ├── gateway/
 │   ├── Dockerfile                # OpenResty alpine + pgmoon
@@ -340,9 +355,15 @@ TAGUATO-SEND/
 │   │   ├── sessions.lua          # Gestion de sesiones
 │   │   ├── message_log.lua       # Registro de mensajes
 │   │   ├── audit.lua             # Log de auditoria
+│   │   ├── recovery.lua          # Recuperacion de contrasena
+│   │   ├── smtp.lua              # Envio de emails via SMTP
+│   │   ├── alerting.lua          # Alertas webhook externas
+│   │   ├── circuit_breaker.lua   # Circuit breaker para upstream
 │   │   ├── scheduled_worker.lua  # Worker de envios programados
 │   │   ├── reconnect_worker.lua  # Worker de auto-reconexion
 │   │   ├── uptime_worker.lua     # Worker de monitoreo
+│   │   ├── backup_worker.lua     # Worker de backup automatico
+│   │   ├── cleanup_worker.lua    # Worker de limpieza (sesiones, logs)
 │   │   └── ...
 │   └── panel/
 │       ├── index.html            # SPA del panel
@@ -378,13 +399,16 @@ TAGUATO-SEND/
 
 ## Workers en Background
 
-TAGUATO-SEND ejecuta 3 workers automaticos en el gateway:
+TAGUATO-SEND ejecuta 6 workers automaticos en el gateway:
 
 | Worker | Intervalo | Funcion |
 |--------|-----------|---------|
-| **Uptime Check** | 5 min | Monitorea salud de los 4 servicios |
+| **Uptime Check** | 5 min | Monitorea salud de los 4 servicios + alertas webhook |
 | **Auto-Reconnect** | 3 min | Detecta y reconecta instancias desconectadas |
 | **Scheduled Messages** | 1 min | Ejecuta envios programados pendientes |
+| **Backup** | 24h (configurable) | Backup automatico de PostgreSQL |
+| **Cleanup** | 1h | Expira sesiones, reintenta webhooks, purga logs antiguos |
+| **Log Rotate** | 24h | Rotacion de logs de nginx |
 
 ---
 
@@ -411,6 +435,11 @@ Las variables de entorno se configuran en `.env` (ver [`.env.example`](.env.exam
 | `ADMIN_PASSWORD` | Contrasena admin inicial |
 | `AUTHENTICATION_API_KEY` | Clave interna gateway-API |
 | `POSTGRES_PASSWORD` | Contrasena de PostgreSQL |
+| `REDIS_PASSWORD` | Contrasena de Redis |
+| `GATEWAY_CORS_ORIGIN` | Dominio permitido para CORS (vacio = sin CORS) |
+| `SMTP_HOST`, `SMTP_PORT`, etc. | Configuracion SMTP para recuperacion de contrasena por email |
+| `ALERT_WEBHOOK_URL` | URL webhook para alertas de caida de servicios (Slack/Discord/Teams) |
+| `BACKUP_INTERVAL` | Intervalo de backup automatico en segundos (default: 86400) |
 
 ---
 
