@@ -1,9 +1,9 @@
 -- External alerting via webhook (Slack, Discord, Teams, generic)
 -- Sends notifications when services go down or circuit breaker opens.
 -- Configure via env: ALERT_WEBHOOK_URL, ALERT_COOLDOWN_SECONDS
--- Uses os.execute + curl for HTTPS support (resty.http lacks openssl in this image)
 
 local cjson = require "cjson"
+local http = require "resty.http"
 
 local _M = {}
 
@@ -31,49 +31,33 @@ local function check_cooldown(key, cooldown)
     return true
 end
 
--- Send webhook payload via curl (handles HTTPS, fire-and-forget)
--- Uses temp file for JSON body to avoid shell injection via io.popen
+-- Send webhook payload via resty.http (safe — no shell involved)
 local function send_webhook(url, payload)
     local json_body = cjson.encode(payload)
 
-    -- Write JSON to temp file (avoids shell metacharacter issues entirely)
-    local tmpfile = os.tmpname()
-    local f = io.open(tmpfile, "w")
-    if not f then
-        ngx.log(ngx.ERR, "alerting: failed to create temp file")
+    local httpc = http.new()
+    httpc:set_timeout(10000)
+
+    local res, err = httpc:request_uri(url, {
+        method = "POST",
+        headers = {
+            ["Content-Type"] = "application/json",
+        },
+        body = json_body,
+        ssl_verify = false,
+    })
+
+    if not res then
+        ngx.log(ngx.ERR, "alerting: webhook request failed: ", err)
         return false
     end
-    f:write(json_body)
-    f:close()
 
-    -- Validate URL: only allow http(s) schemes to prevent injection via URL
-    if not url:match("^https?://") then
-        os.remove(tmpfile)
-        ngx.log(ngx.ERR, "alerting: invalid webhook URL scheme")
+    if res.status >= 400 then
+        ngx.log(ngx.ERR, "alerting: webhook returned HTTP ", res.status)
         return false
     end
 
-    local cmd = string.format(
-        "curl -s -o /dev/null -w '%%{http_code}' -X POST -H 'Content-Type: application/json' -d '@%s' --max-time 10 '%s' 2>/dev/null",
-        tmpfile, url
-    )
-    local handle = io.popen(cmd)
-    local ok = false
-    if handle then
-        local status = handle:read("*a")
-        handle:close()
-        local code = tonumber(status)
-        if code and code >= 400 then
-            ngx.log(ngx.ERR, "alerting: webhook returned HTTP ", status)
-        else
-            ok = true
-        end
-    else
-        ngx.log(ngx.ERR, "alerting: failed to execute curl")
-    end
-
-    os.remove(tmpfile)
-    return ok
+    return true
 end
 
 -- Public: send a service down alert
