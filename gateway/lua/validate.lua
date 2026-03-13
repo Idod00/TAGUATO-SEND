@@ -144,6 +144,20 @@ function _M.validate_webhook_url(url)
     return true
 end
 
+-- Validate Telegram bot token: format is `1234567890:AAAA...`
+function _M.validate_telegram_token(token)
+    if not token or type(token) ~= "string" then
+        return false, "Telegram bot token is required"
+    end
+    if not token:match("^%d+:[%w%-_]+$") then
+        return false, "Invalid Telegram bot token format"
+    end
+    if #token < 10 or #token > 100 then
+        return false, "Invalid Telegram bot token length"
+    end
+    return true
+end
+
 -- Validate enum value against allowed list
 function _M.validate_enum(val, name, allowed)
     if not val or type(val) ~= "string" then

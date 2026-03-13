@@ -59,7 +59,7 @@ if method == "POST" and uri == "/api/auth/login" then
     end
 
     local res, err = db.query(
-        [[SELECT id, username, role, max_instances, must_change_password
+        [[SELECT id, username, role, max_instances, must_change_password, totp_enabled, totp_secret
           FROM taguato.users
           WHERE username = $1
             AND password_hash = crypt($2, password_hash)
@@ -85,13 +85,40 @@ if method == "POST" and uri == "/api/auth/login" then
         return
     end
 
+    local user = res[1]
+
+    -- 2FA check: if enabled, require totp_code in the request body
+    if user.totp_enabled then
+        local totp_code = body.totp_code
+        if not totp_code or totp_code == "" then
+            -- Signal the client that a TOTP code is needed (no session created yet)
+            json.respond(200, { requires_2fa = true })
+            return
+        end
+        local totp = require "totp"
+        if not totp.verify(user.totp_secret, totp_code) then
+            -- Count as a failed attempt against brute-force protection
+            if lock_res and #lock_res > 0 then
+                db.query(
+                    [[UPDATE taguato.users
+                      SET failed_login_attempts = failed_login_attempts + 1,
+                          locked_until = CASE WHEN failed_login_attempts + 1 >= 5
+                                              THEN NOW() + INTERVAL '15 minutes'
+                                              ELSE locked_until END
+                      WHERE id = $1]],
+                    lock_res[1].id
+                )
+            end
+            json.respond(401, { error = "Invalid authenticator code" })
+            return
+        end
+    end
+
     -- Reset failed attempts on successful login
     db.query(
         "UPDATE taguato.users SET failed_login_attempts = 0, locked_until = NULL WHERE id = $1",
-        res[1].id
+        user.id
     )
-
-    local user = res[1]
 
     -- Generate ephemeral session token (random bytes, never stored raw)
     local token_res = db.query("SELECT encode(gen_random_bytes(32), 'hex') as token")
@@ -166,6 +193,7 @@ if method == "GET" and uri == "/api/auth/me" then
             email = user.email,
             phone_number = user.phone_number,
             created_at = user.created_at,
+            totp_enabled = user.totp_enabled or false,
             instances = instances or {},
         }
     })
@@ -293,6 +321,122 @@ if method == "POST" and uri == "/api/auth/logout-all" then
     pcall(audit.log, user.id, user.username, "user_logout_all", "session", nil, nil, ngx.var.remote_addr)
 
     json.respond(200, { message = "All sessions logged out successfully" })
+    return
+end
+
+-- ============================================================
+-- GET /api/auth/2fa/setup  — generate a new secret + QR URI
+-- (does NOT save to DB yet; user must confirm with /enable)
+-- ============================================================
+if method == "GET" and uri == "/api/auth/2fa/setup" then
+    local token = ngx.req.get_headers()["apikey"]
+    local user, _ = session_auth.validate(token)
+    if not user then
+        json.respond(401, { error = "Unauthorized" })
+        return
+    end
+
+    -- Generate 20 random bytes via DB, hex-decode in Lua, base32-encode
+    local rng, _ = db.query("SELECT encode(gen_random_bytes(20), 'hex') AS h")
+    if not rng or #rng == 0 then
+        json.respond(500, { error = "Failed to generate secret" })
+        return
+    end
+    local hex    = rng[1].h
+    local binary = hex:gsub("..", function(h) return string.char(tonumber(h, 16)) end)
+    local totp   = require "totp"
+    local secret = totp.base32_encode(binary)
+
+    local issuer  = "TAGUATO-SEND"
+    local label   = ngx.escape_uri(issuer .. ":" .. user.username)
+    local esc_iss = ngx.escape_uri(issuer)
+    local otpauth = "otpauth://totp/" .. label
+        .. "?secret=" .. secret
+        .. "&issuer=" .. esc_iss
+        .. "&algorithm=SHA1&digits=6&period=30"
+
+    json.respond(200, { secret = secret, otpauth_uri = otpauth })
+    return
+end
+
+-- ============================================================
+-- POST /api/auth/2fa/enable  — body: { secret, code }
+-- Validates the code against the secret, then saves to DB
+-- ============================================================
+if method == "POST" and uri == "/api/auth/2fa/enable" then
+    local token = ngx.req.get_headers()["apikey"]
+    local user, _ = session_auth.validate(token)
+    if not user then
+        json.respond(401, { error = "Unauthorized" })
+        return
+    end
+
+    local body, _ = json.read_body()
+    if not body or not body.secret or not body.code then
+        json.respond(400, { error = "secret and code are required" })
+        return
+    end
+
+    local totp = require "totp"
+    if not totp.verify(body.secret, body.code) then
+        json.respond(400, { error = "Invalid code — verify your authenticator app is synchronized" })
+        return
+    end
+
+    db.query(
+        "UPDATE taguato.users SET totp_secret = $1, totp_enabled = true WHERE id = $2",
+        body.secret, user.id
+    )
+
+    local audit = require "audit"
+    audit.log(user.id, user.username, "2fa_enabled", "user", tostring(user.id), nil, ngx.var.remote_addr)
+
+    json.respond(200, { message = "Two-factor authentication enabled" })
+    return
+end
+
+-- ============================================================
+-- POST /api/auth/2fa/disable  — body: { code }
+-- Requires a valid current code before disabling
+-- ============================================================
+if method == "POST" and uri == "/api/auth/2fa/disable" then
+    local token = ngx.req.get_headers()["apikey"]
+    local user, _ = session_auth.validate(token)
+    if not user then
+        json.respond(401, { error = "Unauthorized" })
+        return
+    end
+
+    local body, _ = json.read_body()
+    if not body or not body.code then
+        json.respond(400, { error = "code is required" })
+        return
+    end
+
+    local secret_res = db.query(
+        "SELECT totp_secret FROM taguato.users WHERE id = $1 AND totp_enabled = true LIMIT 1",
+        user.id
+    )
+    if not secret_res or #secret_res == 0 then
+        json.respond(400, { error = "2FA is not currently enabled" })
+        return
+    end
+
+    local totp = require "totp"
+    if not totp.verify(secret_res[1].totp_secret, body.code) then
+        json.respond(400, { error = "Invalid code" })
+        return
+    end
+
+    db.query(
+        "UPDATE taguato.users SET totp_secret = NULL, totp_enabled = false WHERE id = $1",
+        user.id
+    )
+
+    local audit = require "audit"
+    audit.log(user.id, user.username, "2fa_disabled", "user", tostring(user.id), nil, ngx.var.remote_addr)
+
+    json.respond(200, { message = "Two-factor authentication disabled" })
     return
 end
 

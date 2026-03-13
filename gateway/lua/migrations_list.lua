@@ -134,4 +134,21 @@ return {
                 CHECK (method IN ('email', 'whatsapp', 'admin_email'));
         ]],
     },
+    {
+        version = 11,
+        name = "add_channel_type_to_instances",
+        sql = [[
+            ALTER TABLE taguato.user_instances
+              ADD COLUMN IF NOT EXISTS channel_type VARCHAR(20) DEFAULT 'whatsapp'
+              CHECK (channel_type IN ('whatsapp', 'telegram'));
+        ]],
+    },
+    {
+        version = 12,
+        name = "add_totp_to_users",
+        sql = [[
+            ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(64);
+            ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false;
+        ]],
+    },
 }

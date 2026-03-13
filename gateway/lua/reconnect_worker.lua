@@ -53,6 +53,17 @@ function _M.check()
         end
     end
 
+    -- Skip Telegram instances (bots don't need reconnect)
+    local telegram_instances = {}
+    local tg_res, _ = db.query(
+        "SELECT instance_name FROM taguato.user_instances WHERE channel_type = 'telegram'"
+    )
+    if tg_res then
+        for _, row in ipairs(tg_res) do
+            telegram_instances[row.instance_name] = true
+        end
+    end
+
     local processed = 0
     local max_per_cycle = 10
 
@@ -66,6 +77,11 @@ function _M.check()
         local state = inst.instance and inst.instance.state
 
         if name and state and state ~= "open" then
+            -- Skip Telegram instances (bots don't disconnect like WhatsApp)
+            if telegram_instances[name] then
+                goto continue
+            end
+
             -- Skip instances that have failed too many times recently
             if skip_list[name] then
                 log.info("reconnect_worker", "skipping (too many recent failures)", { instance = name })

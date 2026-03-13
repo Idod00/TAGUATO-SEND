@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS taguato.user_instances (
     id SERIAL PRIMARY KEY,
     user_id INT REFERENCES taguato.users(id) ON DELETE CASCADE,
     instance_name VARCHAR(255) NOT NULL,
+    channel_type VARCHAR(20) DEFAULT 'whatsapp' CHECK (channel_type IN ('whatsapp', 'telegram')),
     created_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(user_id, instance_name),
     UNIQUE(instance_name)
@@ -319,6 +320,12 @@ CREATE INDEX IF NOT EXISTS idx_password_resets_token ON taguato.password_resets(
 -- ============================================
 ALTER TABLE taguato.message_logs ADD COLUMN IF NOT EXISTS scheduled_message_id INT REFERENCES taguato.scheduled_messages(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_message_logs_scheduled ON taguato.message_logs(scheduled_message_id, phone_number) WHERE scheduled_message_id IS NOT NULL;
+
+-- ============================================
+-- Two-factor authentication (TOTP)
+-- ============================================
+ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS totp_secret VARCHAR(64);
+ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false;
 
 -- ============================================
 -- Performance indexes (v8)

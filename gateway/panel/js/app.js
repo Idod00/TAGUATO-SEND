@@ -90,6 +90,7 @@ const App = (() => {
     if (section === 'scheduled') { scheduledPage = 1; loadScheduledSection(); }
     if (section === 'webhooks') loadWebhooksSection();
     if (section === 'sessions') loadSessions();
+    if (section === 'seguridad') load2FAStatus();
     if (section === 'docs') renderDocs();
     if (section === 'admin') loadUsers();
     if (section === 'audit') { auditPage = 1; loadAuditLogs(); }
@@ -98,13 +99,29 @@ const App = (() => {
   }
 
   // --- Auth ---
+  // Stored credentials while waiting for TOTP code
+  let _pendingLoginUser = '';
+  let _pendingLoginPass = '';
+
   async function handleLogin(e) {
     e.preventDefault();
     const btn = $('#login-btn');
     btn.disabled = true;
     btn.textContent = 'Ingresando...';
     try {
-      const data = await API.login($('#login-user').value, $('#login-pass').value);
+      const user = $('#login-user').value;
+      const pass = $('#login-pass').value;
+      const data = await API.login(user, pass);
+      if (data.requires_2fa) {
+        // Password OK but TOTP needed — show step 2
+        _pendingLoginUser = user;
+        _pendingLoginPass = pass;
+        hide($('#login-step1'));
+        show($('#login-step2'));
+        $('#totp-code').value = '';
+        $('#totp-code').focus();
+        return;
+      }
       currentUser = data.user;
       if (currentUser.must_change_password) {
         showChangePassword();
@@ -116,6 +133,32 @@ const App = (() => {
     } finally {
       btn.disabled = false;
       btn.textContent = 'Ingresar';
+    }
+  }
+
+  async function handleTotpVerify(e) {
+    e.preventDefault();
+    const btn = $('#totp-btn');
+    btn.disabled = true;
+    btn.textContent = 'Verificando...';
+    try {
+      const code = $('#totp-code').value.trim();
+      const data = await API.login(_pendingLoginUser, _pendingLoginPass, code);
+      _pendingLoginUser = '';
+      _pendingLoginPass = '';
+      currentUser = data.user;
+      if (currentUser.must_change_password) {
+        showChangePassword();
+      } else {
+        showApp();
+      }
+    } catch (err) {
+      showToast(err.message || 'Codigo invalido', 'error');
+      $('#totp-code').value = '';
+      $('#totp-code').focus();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Verificar';
     }
   }
 
@@ -132,8 +175,14 @@ const App = (() => {
     hide($('#change-password-screen'));
     hide($('#recovery-screen'));
     show($('#login-screen'));
+    // Reset both login steps
+    show($('#login-step1'));
+    hide($('#login-step2'));
     $('#login-user').value = '';
     $('#login-pass').value = '';
+    $('#totp-code') && ($('#totp-code').value = '');
+    _pendingLoginUser = '';
+    _pendingLoginPass = '';
     $('#login-user').focus();
   }
 
@@ -374,11 +423,22 @@ const App = (() => {
   async function handleCreateInstance(e) {
     e.preventDefault();
     const input = $('#new-instance-name');
+    const channelSel = $('#new-instance-channel');
+    const tokenInput = $('#new-instance-token');
     const name = input.value.trim();
     if (!name) return;
+    const channel = channelSel.value;
+    const isTelegram = channel === 'telegram';
+    const integration = isTelegram ? 'TELEGRAM' : 'WHATSAPP-BAILEYS';
+    const token = isTelegram ? tokenInput.value.trim() : undefined;
+    if (isTelegram && !token) {
+      showToast('El bot token es requerido para instancias Telegram', 'error');
+      return;
+    }
     try {
-      await API.createInstance(name);
+      await API.createInstance(name, integration, token);
       input.value = '';
+      tokenInput.value = '';
       showToast('Instancia creada');
       loadInstances();
     } catch (err) {
@@ -1583,6 +1643,118 @@ const App = (() => {
   }
 
   // --- Sessions ---
+  // ---- 2FA Management ----
+  let _totpSetupSecret = '';
+
+  async function load2FAStatus() {
+    const area  = $('#totp-status-area');
+    const badge = $('#totp-badge');
+    if (!area) return;
+    try {
+      const profile = await API.getProfile();
+      const enabled = profile.user && profile.user.totp_enabled;
+      if (badge) {
+        badge.textContent  = enabled ? 'Activo' : 'Desactivado';
+        badge.className    = 'help-badge ' + (enabled ? 'badge-connected' : 'badge-disconnected');
+      }
+      if (enabled) {
+        area.innerHTML = `
+          <p style="margin:0.75rem 0 0.5rem;color:var(--text-light);font-size:0.9rem;">
+            El codigo TOTP se solicitara en cada inicio de sesion.
+          </p>
+          <div class="form-group" style="margin-top:1rem;max-width:280px;">
+            <label>Codigo actual para confirmar desactivacion</label>
+            <input type="text" id="totp-disable-code" class="form-control totp-input"
+              maxlength="6" placeholder="000000" inputmode="numeric">
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="App.handle2FADisable()">Desactivar 2FA</button>`;
+      } else {
+        area.innerHTML = `
+          <p style="margin:0.75rem 0 1rem;color:var(--text-light);font-size:0.9rem;">
+            Agrega una capa extra de seguridad. Necesitaras Google Authenticator, Authy u otra app TOTP.
+          </p>
+          <div id="totp-setup-area">
+            <button class="btn btn-primary btn-sm" onclick="App.startTOTPSetup()">Activar 2FA</button>
+          </div>`;
+      }
+    } catch (_) {
+      area.innerHTML = '<p style="color:var(--text-light);">Error al cargar estado 2FA</p>';
+    }
+  }
+
+  async function startTOTPSetup() {
+    const setupArea = $('#totp-setup-area');
+    if (!setupArea) return;
+    setupArea.innerHTML = '<div class="loading">Generando secreto...</div>';
+    try {
+      const data = await API.setup2FA();
+      _totpSetupSecret = data.secret;
+      setupArea.innerHTML = `
+        <div class="totp-setup-box">
+          <p><strong>Paso 1:</strong> Escanea el QR con tu app autenticadora</p>
+          <div id="totp-qr-canvas" class="totp-qr"></div>
+          <p style="margin-top:0.75rem;"><strong>Paso 2:</strong> O ingresa el secreto manualmente:</p>
+          <code class="totp-secret-display">${esc(data.secret)}</code>
+          <p style="margin-top:1rem;"><strong>Paso 3:</strong> Ingresa el codigo que muestra la app para confirmar:</p>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+            <input type="text" id="totp-enable-code" class="form-control totp-input"
+              maxlength="6" placeholder="000000" inputmode="numeric" style="max-width:160px;">
+            <button class="btn btn-primary btn-sm" onclick="App.handle2FAEnable()">Confirmar y activar</button>
+            <button class="btn btn-ghost btn-sm" onclick="App.load2FAStatus()">Cancelar</button>
+          </div>
+        </div>`;
+      // Render QR using bundled qrcode.js
+      if (typeof QRCode !== 'undefined') {
+        new QRCode(document.getElementById('totp-qr-canvas'), {
+          text:           data.otpauth_uri,
+          width:          180,
+          height:         180,
+          colorDark:      '#000000',
+          colorLight:     '#ffffff',
+          correctLevel:   QRCode.CorrectLevel.M,
+        });
+      } else {
+        $('#totp-qr-canvas').innerHTML =
+          '<p style="color:var(--text-light);font-size:0.8rem;">QR no disponible — usa el secreto manual</p>';
+      }
+      $('#totp-enable-code').focus();
+    } catch (err) {
+      setupArea.innerHTML = `<p style="color:var(--danger);">${esc(err.message || 'Error')}</p>`;
+    }
+  }
+
+  async function handle2FAEnable() {
+    const code = $('#totp-enable-code') && $('#totp-enable-code').value.trim();
+    if (!code || code.length !== 6) {
+      showToast('Ingresa el codigo de 6 digitos de tu app', 'error');
+      return;
+    }
+    try {
+      await API.enable2FA(_totpSetupSecret, code);
+      _totpSetupSecret = '';
+      showToast('2FA activado exitosamente');
+      load2FAStatus();
+    } catch (err) {
+      showToast(err.message || 'Codigo invalido', 'error');
+    }
+  }
+
+  async function handle2FADisable() {
+    const code = $('#totp-disable-code') && $('#totp-disable-code').value.trim();
+    if (!code || code.length !== 6) {
+      showToast('Ingresa el codigo de tu app para confirmar', 'error');
+      return;
+    }
+    if (!confirm('Desactivar 2FA? Tu cuenta quedara protegida solo por contrasena.')) return;
+    try {
+      await API.disable2FA(code);
+      showToast('2FA desactivado');
+      load2FAStatus();
+    } catch (err) {
+      showToast(err.message || 'Codigo invalido', 'error');
+    }
+  }
+
   async function loadSessions() {
     const list = $('#sessions-list');
     list.innerHTML = '<div class="loading">Cargando sesiones...</div>';
@@ -2667,6 +2839,14 @@ const App = (() => {
   async function init() {
     // Event listeners
     on('#login-form', 'submit', handleLogin);
+    on('#totp-form', 'submit', handleTotpVerify);
+    on('#totp-back-btn', 'click', () => {
+      _pendingLoginUser = '';
+      _pendingLoginPass = '';
+      hide($('#login-step2'));
+      show($('#login-step1'));
+      $('#totp-code').value = '';
+    });
     on('#change-password-form', 'submit', handleChangePassword);
     on('#forgot-password-link', 'click', showRecovery);
     on('#recovery-step1-form', 'submit', handleForgotPassword);
@@ -2676,7 +2856,26 @@ const App = (() => {
     $$('.recovery-back-login').forEach(btn => {
       btn.addEventListener('click', showLogin);
     });
+    // Help accordion
+    document.addEventListener('click', (e) => {
+      const header = e.target.closest('.help-topic-header');
+      if (!header) return;
+      const topic = header.closest('.help-topic');
+      if (topic) topic.classList.toggle('open');
+    });
+
     on('#create-instance-form', 'submit', handleCreateInstance);
+    on('#new-instance-channel', 'change', function() {
+      const tokenInput = $('#new-instance-token');
+      if (this.value === 'telegram') {
+        tokenInput.classList.remove('hidden');
+        tokenInput.required = true;
+      } else {
+        tokenInput.classList.add('hidden');
+        tokenInput.required = false;
+        tokenInput.value = '';
+      }
+    });
     on('#send-message-form', 'submit', handleSendMessage);
     on('#bulk-message-form', 'submit', handleBulkMessage);
     on('#bulk-cancel-btn', 'click', () => {
@@ -2780,6 +2979,7 @@ const App = (() => {
     loadContactsIntoSchedNumbers,
     confirmDeleteWebhook,
     revokeSessionAction,
+    load2FAStatus, startTOTPSetup, handle2FAEnable, handle2FADisable,
     goAuditPage,
     showAuditDetail,
     editUser,

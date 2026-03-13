@@ -122,14 +122,29 @@ if uri == "/instance/create" and method == "POST" then
         return
     end
 
+    -- Determine channel type and validate accordingly
+    local channel_type = "whatsapp"
+    if body.integration == "TELEGRAM" then
+        channel_type = "telegram"
+        if not body.token or body.token == "" then
+            json.respond(400, { error = "token is required for Telegram instances" })
+            return
+        end
+        local token_ok, token_err = validate.validate_telegram_token(body.token)
+        if not token_ok then
+            json.respond(400, { error = token_err })
+            return
+        end
+    end
+
     -- Atomic insert: check limit + uniqueness in one query
     local ins_res, ins_err = db.query(
-        [[INSERT INTO taguato.user_instances (user_id, instance_name)
-          SELECT $1, $2
+        [[INSERT INTO taguato.user_instances (user_id, instance_name, channel_type)
+          SELECT $1, $2, $4
           WHERE (SELECT COUNT(*) FROM taguato.user_instances WHERE user_id = $1) < $3
           ON CONFLICT (instance_name) DO NOTHING
           RETURNING id]],
-        user.id, instance_name, user.max_instances
+        user.id, instance_name, user.max_instances, channel_type
     )
 
     if not ins_res or #ins_res == 0 then

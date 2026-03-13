@@ -44,7 +44,7 @@ function _M.validate(token)
     local res, err = db.query(
         [[SELECT u.id, u.username, u.role, u.max_instances, u.is_active,
                  u.rate_limit, u.must_change_password, u.email, u.phone_number,
-                 u.created_at,
+                 u.created_at, u.totp_enabled,
                  s.id AS session_id, s.expires_at
           FROM taguato.sessions s
           JOIN taguato.users u ON u.id = s.user_id
@@ -72,6 +72,7 @@ function _M.validate(token)
         email = row.email,
         phone_number = row.phone_number,
         created_at = row.created_at,
+        totp_enabled = row.totp_enabled or false,
         session_id = row.session_id,
         token_hash = token_hash,
     }

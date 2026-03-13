@@ -41,10 +41,24 @@ const API = (() => {
   }
 
   // Auth
-  async function login(username, password) {
-    const data = await request('POST', '/api/auth/login', { username, password });
-    setSession(data.token, data.user);
-    return data;
+  async function login(username, password, totpCode) {
+    const body = { username, password };
+    if (totpCode) body.totp_code = totpCode;
+    const data = await request('POST', '/api/auth/login', body);
+    if (data.token) setSession(data.token, data.user);
+    return data;  // may contain { requires_2fa: true } if TOTP needed
+  }
+
+  async function setup2FA() {
+    return await request('GET', '/api/auth/2fa/setup');
+  }
+
+  async function enable2FA(secret, code) {
+    return await request('POST', '/api/auth/2fa/enable', { secret, code });
+  }
+
+  async function disable2FA(code) {
+    return await request('POST', '/api/auth/2fa/disable', { code });
   }
 
   async function getProfile() {
@@ -79,11 +93,10 @@ const API = (() => {
     return await request('GET', '/instance/fetchInstances');
   }
 
-  async function createInstance(instanceName) {
-    return await request('POST', '/instance/create', {
-      instanceName,
-      integration: 'WHATSAPP-BAILEYS',
-    });
+  async function createInstance(instanceName, integration, token) {
+    const body = { instanceName, integration: integration || 'WHATSAPP-BAILEYS' };
+    if (token) body.token = token;
+    return await request('POST', '/instance/create', body);
   }
 
   async function deleteInstance(instanceName) {
@@ -418,6 +431,7 @@ const API = (() => {
   return {
     getToken, getStoredUser, setSession, clearSession,
     login, logout, getProfile, changePassword, forgotPassword, verifyResetCode, resetPassword,
+    setup2FA, enable2FA, disable2FA,
     fetchInstances, createInstance, deleteInstance, connectInstance, getInstanceStatus,
     logoutInstance, restartInstance, getInstanceStats,
     sendText, sendMedia, sendBulkText, cancelBulk,

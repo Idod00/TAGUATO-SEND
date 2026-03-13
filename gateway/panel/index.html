@@ -20,21 +20,44 @@
     <div class="login-box">
       <img src="/panel/img/logo.png" alt="TAGUATO" class="login-logo">
       <h1>TAGUATO-SEND <svg class="whatsapp-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></h1>
-      <p class="subtitle">Panel de gestion WhatsApp</p>
-      <form id="login-form">
-        <div class="form-group">
-          <label for="login-user">Usuario</label>
-          <input type="text" id="login-user" class="form-control" autocomplete="username" required>
+      <p class="subtitle">Panel de gestion WhatsApp &amp; Telegram</p>
+
+      <!-- Step 1: Usuario y contraseña -->
+      <div id="login-step1">
+        <form id="login-form">
+          <div class="form-group">
+            <label for="login-user">Usuario</label>
+            <input type="text" id="login-user" class="form-control" autocomplete="username" required>
+          </div>
+          <div class="form-group">
+            <label for="login-pass">Contrasena</label>
+            <input type="password" id="login-pass" class="form-control" autocomplete="current-password" required>
+          </div>
+          <button type="submit" id="login-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Ingresar</button>
+        </form>
+        <div style="text-align:center;margin-top:0.75rem;">
+          <button type="button" id="forgot-password-link" class="btn-link">Olvidaste tu contrasena?</button>
         </div>
-        <div class="form-group">
-          <label for="login-pass">Contrasena</label>
-          <input type="password" id="login-pass" class="form-control" autocomplete="current-password" required>
-        </div>
-        <button type="submit" id="login-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Ingresar</button>
-      </form>
-      <div style="text-align:center;margin-top:0.75rem;">
-        <button type="button" id="forgot-password-link" class="btn-link">Olvidaste tu contrasena?</button>
       </div>
+
+      <!-- Step 2: Codigo TOTP (visible solo si 2FA activo) -->
+      <div id="login-step2" class="hidden">
+        <p class="subtitle" style="text-align:center;">
+          🔐 Ingresa el codigo de 6 digitos de tu app autenticadora
+        </p>
+        <form id="totp-form">
+          <div class="form-group">
+            <input type="text" id="totp-code" class="form-control totp-input"
+              maxlength="6" pattern="[0-9]{6}" placeholder="000000"
+              autocomplete="one-time-code" inputmode="numeric" required>
+          </div>
+          <button type="submit" id="totp-btn" class="btn btn-primary" style="width:100%;margin-top:0.5rem;">Verificar</button>
+        </form>
+        <div style="text-align:center;margin-top:0.75rem;">
+          <button type="button" id="totp-back-btn" class="btn-link">← Volver al login</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -138,7 +161,9 @@
         <a href="#" class="nav-link" data-section="scheduled">Programados</a>
         <a href="#" class="nav-link" data-section="webhooks">Webhooks</a>
         <a href="#" class="nav-link" data-section="sessions">Sesiones</a>
+        <a href="#" class="nav-link" data-section="seguridad">Seguridad</a>
         <a href="#" class="nav-link" data-section="docs">API Docs</a>
+        <a href="#" class="nav-link" data-section="ayuda">Ayuda</a>
         <a href="#" class="nav-link hidden" id="nav-status" data-section="status">Status</a>
         <a href="#" class="nav-link hidden" id="nav-admin" data-section="admin">Admin</a>
         <a href="#" class="nav-link hidden" id="nav-audit" data-section="audit">Auditoria</a>
@@ -171,9 +196,14 @@
 
       <!-- Instances Section -->
       <div id="section-instances" class="section">
-        <h2>Instancias WhatsApp</h2>
-        <form id="create-instance-form" class="inline-form">
-          <input type="text" id="new-instance-name" class="form-control" placeholder="Nombre de nueva instancia" required>
+        <h2>Instancias</h2>
+        <form id="create-instance-form" class="inline-form" style="flex-wrap:wrap;gap:0.5rem;">
+          <input type="text" id="new-instance-name" class="form-control" placeholder="Nombre de instancia" required style="flex:1;min-width:160px;">
+          <select id="new-instance-channel" class="form-control" style="width:auto;">
+            <option value="whatsapp">WhatsApp</option>
+            <option value="telegram">Telegram</option>
+          </select>
+          <input type="text" id="new-instance-token" class="form-control hidden" placeholder="Bot token (ej: 123456:ABC...)" style="flex:1;min-width:220px;">
           <button type="submit" class="btn btn-primary">Crear</button>
         </form>
         <div id="instances-list"></div>
@@ -495,6 +525,26 @@
         <div id="sessions-list"></div>
       </div>
 
+      <!-- Seguridad Section -->
+      <div id="section-seguridad" class="section hidden">
+        <h2>Seguridad</h2>
+
+        <!-- 2FA Card -->
+        <div class="totp-card">
+          <div class="totp-card-header">
+            <span class="totp-card-title">🔐 Autenticacion de Dos Factores (2FA)</span>
+            <span id="totp-badge" class="help-badge badge-disconnected">Desactivado</span>
+          </div>
+          <p style="margin:0.4rem 0 0;color:var(--text-light);font-size:0.85rem;">
+            Requiere un codigo de tu app autenticadora al iniciar sesion.
+            Compatible con Google Authenticator, Authy, Aegis y cualquier app TOTP.
+          </p>
+          <div id="totp-status-area" style="margin-top:0.75rem;">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+      </div>
+
       <!-- API Docs Section -->
       <div id="section-docs" class="section hidden">
         <div class="docs-header">
@@ -687,6 +737,307 @@
         <div id="maintenance-list"></div>
       </div>
 
+      <!-- Ayuda Section -->
+      <div id="section-ayuda" class="section hidden">
+        <h2>Ayuda y Guia de Uso</h2>
+        <p class="help-intro">Bienvenido a <strong>TAGUATO-SEND</strong>. Aqui encontraras una guia paso a paso para cada funcion del portal. Haz clic en cada tema para expandirlo.</p>
+
+        <div class="help-accordion">
+
+          <!-- Instancias WhatsApp -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">📱</span>
+              <span>Instancias WhatsApp</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>Una <strong>instancia</strong> representa una conexion a un numero de WhatsApp. Cada numero requiere su propia instancia.</p>
+              <h4>Crear una instancia WhatsApp</h4>
+              <ol class="help-steps">
+                <li>Ve a la seccion <strong>Instancias</strong> en el menu lateral.</li>
+                <li>Escribe un nombre para la instancia (solo letras, numeros y guiones). Ej: <code>ventas-principal</code></li>
+                <li>Selecciona <strong>WhatsApp</strong> en el selector de canal.</li>
+                <li>Haz clic en <strong>Crear</strong>.</li>
+              </ol>
+              <h4>Conectar a WhatsApp (escanear QR)</h4>
+              <ol class="help-steps">
+                <li>Una vez creada la instancia, aparecera en la lista con estado <span class="help-badge badge-disconnected">Desconectado</span>.</li>
+                <li>Haz clic en el boton <strong>Conectar / QR</strong> de la instancia.</li>
+                <li>Se abrira un modal con el codigo QR. Escanea con WhatsApp en tu telefono:<br>
+                  <em>WhatsApp &rarr; Dispositivos vinculados &rarr; Vincular dispositivo</em></li>
+                <li>Espera unos segundos. El estado cambiara a <span class="help-badge badge-connected">Conectado</span>.</li>
+              </ol>
+              <div class="help-tip">El QR expira en ~60 segundos. Si vence, haz clic de nuevo en Conectar para obtener uno nuevo.</div>
+              <h4>Estados de la instancia</h4>
+              <ul class="help-list">
+                <li><span class="help-badge badge-connected">Conectado</span> &mdash; Listo para enviar mensajes.</li>
+                <li><span class="help-badge badge-connecting">Conectando</span> &mdash; Sincronizando con WhatsApp.</li>
+                <li><span class="help-badge badge-disconnected">Desconectado</span> &mdash; Requiere reconexion.</li>
+              </ul>
+              <div class="help-warn">Si cierras sesion en el telefono, la instancia se desconectara y deberas escanear el QR nuevamente.</div>
+            </div>
+          </div>
+
+          <!-- Instancias Telegram -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">✈️</span>
+              <span>Instancias Telegram</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>Las instancias Telegram funcionan mediante un <strong>Bot de Telegram</strong>. No requieren escanear QR ni mantener un telefono conectado.</p>
+              <h4>Paso 1: Crear el bot en Telegram</h4>
+              <ol class="help-steps">
+                <li>Abre Telegram y busca <strong>@BotFather</strong>.</li>
+                <li>Envia el comando <code>/newbot</code>.</li>
+                <li>BotFather te pedira un nombre para el bot (ej: <em>Mi Bot de Ventas</em>) y luego un nombre de usuario que debe terminar en <code>bot</code> (ej: <em>miventas_bot</em>).</li>
+                <li>BotFather te entregara un <strong>token</strong> con formato: <code>1234567890:AAHb...</code></li>
+                <li>Guarda ese token, lo necesitaras en el siguiente paso.</li>
+              </ol>
+              <h4>Paso 2: Crear la instancia en el portal</h4>
+              <ol class="help-steps">
+                <li>Ve a <strong>Instancias</strong> &rarr; escribe el nombre de la instancia.</li>
+                <li>Selecciona <strong>Telegram</strong> en el selector de canal.</li>
+                <li>Pega el token que te dio BotFather en el campo <strong>Bot token</strong>.</li>
+                <li>Haz clic en <strong>Crear</strong>. La instancia quedara activa de inmediato.</li>
+              </ol>
+              <div class="help-tip">Los bots de Telegram no se desconectan como WhatsApp. El sistema no intentara reconectarlos automaticamente.</div>
+              <div class="help-warn">El bot solo recibe mensajes de usuarios que le hayan enviado <code>/start</code> previamente. Para enviar mensajes debes conocer el Chat ID del destinatario.</div>
+            </div>
+          </div>
+
+          <!-- Enviar Mensajes -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">💬</span>
+              <span>Enviar Mensajes</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>Desde la seccion <strong>Mensajes</strong> puedes enviar mensajes individuales de texto o con archivos adjuntos.</p>
+              <h4>Mensaje de texto</h4>
+              <ol class="help-steps">
+                <li>Selecciona la <strong>instancia</strong> que usaras para enviar.</li>
+                <li>Ingresa el numero de destino con codigo de pais, sin el signo <code>+</code>. Ej: <code>50688888888</code></li>
+                <li>Escribe el mensaje en el campo de texto.</li>
+                <li>Haz clic en <strong>Enviar</strong>.</li>
+              </ol>
+              <h4>Mensaje con archivo (imagen, video, audio, documento)</h4>
+              <ol class="help-steps">
+                <li>Selecciona el tipo de archivo en el selector de tipo de mensaje.</li>
+                <li>Pega la URL publica del archivo o sube el archivo directamente.</li>
+                <li>Opcionalmente agrega un texto como descripcion.</li>
+                <li>Haz clic en <strong>Enviar</strong>.</li>
+              </ol>
+              <div class="help-tip">Puedes usar emojis haciendo clic en el icono de cara sonriente junto al campo de texto.</div>
+            </div>
+          </div>
+
+          <!-- Mensajes Masivos -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">📢</span>
+              <span>Mensajes Masivos</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>El envio masivo te permite enviar el mismo mensaje a multiples numeros en una sola operacion.</p>
+              <ol class="help-steps">
+                <li>En la seccion <strong>Mensajes</strong>, desplazate a la parte de <strong>Envio Masivo</strong>.</li>
+                <li>Selecciona la instancia de envio.</li>
+                <li>Ingresa los numeros destinatarios separados por coma o en lineas separadas. Ej:<br><code>50688888888, 50677777777</code></li>
+                <li>También puedes cargar una lista de contactos guardada haciendo clic en <strong>Cargar Lista</strong>.</li>
+                <li>Escribe el mensaje y haz clic en <strong>Enviar a Todos</strong>.</li>
+              </ol>
+              <div class="help-tip">El envio se realiza con un intervalo entre mensajes para evitar bloqueos. Puedes cancelar en cualquier momento con el boton <strong>Cancelar</strong>.</div>
+              <div class="help-warn">Enviar mensajes no solicitados puede resultar en el bloqueo del numero por parte de WhatsApp. Usa esta funcion responsablemente.</div>
+            </div>
+          </div>
+
+          <!-- Plantillas -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">📝</span>
+              <span>Plantillas de Mensajes</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>Las <strong>plantillas</strong> son mensajes predefinidos que puedes reutilizar para ahorrar tiempo.</p>
+              <h4>Crear una plantilla</h4>
+              <ol class="help-steps">
+                <li>Ve a la seccion <strong>Plantillas</strong>.</li>
+                <li>Escribe un nombre descriptivo (ej: <em>Bienvenida</em>).</li>
+                <li>Escribe el contenido del mensaje.</li>
+                <li>Haz clic en <strong>Crear</strong>.</li>
+              </ol>
+              <h4>Usar una plantilla al enviar</h4>
+              <ol class="help-steps">
+                <li>En el formulario de envio de mensajes, haz clic en <strong>Usar Plantilla</strong>.</li>
+                <li>Selecciona la plantilla deseada. El contenido se cargara automaticamente.</li>
+                <li>Modifica el texto si es necesario y envia.</li>
+              </ol>
+            </div>
+          </div>
+
+          <!-- Contactos -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">👥</span>
+              <span>Listas de Contactos</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>Organiza numeros de telefono en <strong>listas de contactos</strong> para usarlos en envios masivos.</p>
+              <h4>Crear una lista</h4>
+              <ol class="help-steps">
+                <li>Ve a la seccion <strong>Contactos</strong>.</li>
+                <li>Escribe el nombre de la lista y haz clic en <strong>Crear Lista</strong>.</li>
+                <li>Haz clic en la lista recien creada para abrirla.</li>
+                <li>Agrega contactos: ingresa el numero (con codigo de pais) y opcionalmente una etiqueta.</li>
+              </ol>
+              <h4>Usar una lista en mensajes masivos</h4>
+              <ol class="help-steps">
+                <li>En el formulario de envio masivo, haz clic en <strong>Cargar Lista</strong>.</li>
+                <li>Selecciona la lista deseada. Los numeros se cargaran automaticamente.</li>
+              </ol>
+              <div class="help-tip">Puedes tener multiples listas para diferentes segmentos: clientes, proveedores, equipo interno, etc.</div>
+            </div>
+          </div>
+
+          <!-- Historial -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">📋</span>
+              <span>Historial de Mensajes</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>El <strong>historial</strong> registra todos los mensajes enviados desde el portal.</p>
+              <ul class="help-list">
+                <li>Filtra por instancia, numero, estado o rango de fechas.</li>
+                <li>Cada registro muestra instancia, numero, tipo de mensaje, estado y fecha.</li>
+                <li>Estados: <span class="help-badge badge-connected">Enviado</span> <span class="help-badge badge-disconnected">Fallido</span> <span class="help-badge" style="background:#e5e7eb;color:#374151;">Cancelado</span></li>
+              </ul>
+              <h4>Exportar a CSV</h4>
+              <ol class="help-steps">
+                <li>Aplica los filtros deseados.</li>
+                <li>Haz clic en <strong>Exportar CSV</strong> para descargar el historial filtrado.</li>
+              </ol>
+            </div>
+          </div>
+
+          <!-- Programados -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">⏰</span>
+              <span>Mensajes Programados</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>Programa mensajes para que se envien automaticamente en una fecha y hora especificas.</p>
+              <ol class="help-steps">
+                <li>Ve a la seccion <strong>Programados</strong>.</li>
+                <li>Selecciona la instancia y los destinatarios (o carga una lista).</li>
+                <li>Escribe el mensaje.</li>
+                <li>Elige la <strong>fecha y hora</strong> de envio.</li>
+                <li>Haz clic en <strong>Programar Envio</strong>.</li>
+              </ol>
+              <div class="help-tip">El sistema revisa los mensajes pendientes cada minuto. El envio puede ocurrir con hasta ~60 segundos de retraso respecto a la hora exacta.</div>
+              <div class="help-warn">La instancia seleccionada debe estar <strong>conectada</strong> al momento del envio. Si esta desconectada, el mensaje quedara como fallido.</div>
+            </div>
+          </div>
+
+          <!-- Webhooks -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">🔗</span>
+              <span>Webhooks</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>Los <strong>webhooks</strong> permiten que tu servidor reciba notificaciones en tiempo real cuando ocurren eventos en tus instancias (mensajes recibidos, cambios de estado, etc.).</p>
+              <h4>Configurar un webhook</h4>
+              <ol class="help-steps">
+                <li>Ve a la seccion <strong>Webhooks</strong>.</li>
+                <li>Selecciona la instancia.</li>
+                <li>Ingresa la URL de tu servidor que recibira los eventos (debe ser HTTPS y publica).</li>
+                <li>Selecciona los eventos que quieres recibir.</li>
+                <li>Haz clic en <strong>Crear Webhook</strong>.</li>
+              </ol>
+              <div class="help-tip">La URL del webhook debe ser accesible desde internet. No puedes usar <code>localhost</code> ni IPs privadas.</div>
+              <div class="help-warn">Si el webhook falla repetidamente, el sistema lo marcara como inactivo. Revisa que tu servidor responda con HTTP 200.</div>
+            </div>
+          </div>
+
+          <!-- Sesiones -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">🔐</span>
+              <span>Sesiones</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>La seccion <strong>Sesiones</strong> muestra todos los dispositivos y navegadores donde tienes sesion activa.</p>
+              <ul class="help-list">
+                <li>Cada sesion muestra IP, navegador y ultima actividad.</li>
+                <li>Puedes cerrar sesiones individuales sospechosas.</li>
+                <li>El boton <strong>Cerrar todas las sesiones</strong> invalida todos los tokens activos, incluyendo el actual.</li>
+              </ul>
+              <div class="help-tip">Las sesiones expiran automaticamente despues de 24 horas de inactividad.</div>
+            </div>
+          </div>
+
+          <!-- API -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">⚙️</span>
+              <span>API REST</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <p>TAGUATO-SEND expone una API REST completa para que puedas integrar el envio de mensajes en tus propias aplicaciones.</p>
+              <h4>Autenticacion</h4>
+              <p>Todas las solicitudes requieren el header <code>apikey</code> con tu token de sesion:</p>
+              <pre class="help-code">apikey: tu-token-de-sesion</pre>
+              <p>Obtén tu token haciendo login en <code>POST /api/auth/login</code>.</p>
+              <h4>Endpoints principales</h4>
+              <ul class="help-list">
+                <li><code>POST /api/auth/login</code> &mdash; Iniciar sesion</li>
+                <li><code>GET /instance/fetchInstances</code> &mdash; Listar instancias</li>
+                <li><code>POST /instance/create</code> &mdash; Crear instancia</li>
+                <li><code>POST /message/sendText/{instancia}</code> &mdash; Enviar texto</li>
+                <li><code>POST /message/sendMedia/{instancia}</code> &mdash; Enviar archivo</li>
+              </ul>
+              <div class="help-tip">Consulta la seccion <strong>API Docs</strong> en el menu para ver la referencia completa con todos los parametros y ejemplos.</div>
+            </div>
+          </div>
+
+          <!-- Cambiar contrasena -->
+          <div class="help-topic">
+            <button class="help-topic-header">
+              <span class="help-topic-icon">🔑</span>
+              <span>Cambiar Contrasena y Seguridad</span>
+              <span class="help-topic-arrow">&#9660;</span>
+            </button>
+            <div class="help-topic-body">
+              <h4>Cambiar contrasena</h4>
+              <ol class="help-steps">
+                <li>Haz clic en tu nombre de usuario en la parte superior del menu lateral.</li>
+                <li>Selecciona <strong>Cambiar contrasena</strong>.</li>
+                <li>Ingresa tu contrasena actual y la nueva contrasena.</li>
+                <li>La nueva contrasena debe tener minimo 8 caracteres, una mayuscula, una minuscula y un numero.</li>
+              </ol>
+              <div class="help-warn">Al cambiar la contrasena, todas tus sesiones activas seran cerradas y deberas iniciar sesion nuevamente.</div>
+              <h4>Bloqueo por intentos fallidos</h4>
+              <p>Despues de 5 intentos de login fallidos, la cuenta se bloquea por 15 minutos automaticamente.</p>
+            </div>
+          </div>
+
+        </div><!-- /.help-accordion -->
+      </div><!-- /#section-ayuda -->
+
     </main>
   </div>
 
@@ -849,6 +1200,7 @@
     <div id="emoji-picker-grid" class="emoji-picker-grid"></div>
   </div>
 
+  <script src="/panel/js/qrcode.min.js"></script>
   <script src="/panel/js/api.js?v=2.1"></script>
   <script src="/panel/js/docs-data.js?v=2.1"></script>
   <script src="/panel/js/app.js?v=2.1"></script>

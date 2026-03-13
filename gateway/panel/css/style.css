@@ -1815,3 +1815,221 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .detail-actions { flex-wrap: wrap; }
   .detail-actions .btn { flex: 1 1 45%; }
 }
+
+/* ============================================
+   Help / Ayuda Section
+   ============================================ */
+.help-intro {
+  color: var(--text-light);
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.help-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.help-topic {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.help-topic-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  background: var(--bg-card);
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.help-topic-header:hover {
+  background: var(--bg);
+}
+
+.help-topic-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.help-topic-arrow {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--text-light);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+
+.help-topic.open .help-topic-arrow {
+  transform: rotate(180deg);
+}
+
+.help-topic-body {
+  display: none;
+  padding: 1rem 1.25rem 1.25rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.help-topic.open .help-topic-body {
+  display: block;
+}
+
+.help-topic-body h4 {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--primary);
+}
+
+.help-topic-body h4:first-child {
+  margin-top: 0.25rem;
+}
+
+.help-steps {
+  padding-left: 1.25rem;
+  margin: 0.4rem 0 0.8rem;
+}
+
+.help-steps li {
+  margin-bottom: 0.35rem;
+}
+
+.help-list {
+  padding-left: 1.25rem;
+  margin: 0.4rem 0 0.8rem;
+  list-style: disc;
+}
+
+.help-list li {
+  margin-bottom: 0.3rem;
+}
+
+.help-tip {
+  background: #f0fdf4;
+  border-left: 3px solid var(--success);
+  padding: 0.6rem 0.9rem;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: 0.75rem 0;
+  font-size: 0.875rem;
+  color: #166534;
+}
+
+.help-warn {
+  background: #fff7ed;
+  border-left: 3px solid var(--warning);
+  padding: 0.6rem 0.9rem;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin: 0.75rem 0;
+  font-size: 0.875rem;
+  color: #92400e;
+}
+
+.help-code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-family: monospace;
+  font-size: 0.85rem;
+  margin: 0.4rem 0 0.8rem;
+  overflow-x: auto;
+}
+
+.help-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+[data-theme="dark"] .help-tip {
+  background: #052e16;
+  color: #86efac;
+}
+[data-theme="dark"] .help-warn {
+  background: #1c1103;
+  color: #fde68a;
+}
+[data-theme="dark"] .help-code {
+  background: var(--bg);
+}
+
+/* ============================================
+   2FA / TOTP Styles
+   ============================================ */
+.totp-input {
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  text-align: center;
+  font-family: monospace;
+  padding: 0.5rem 0.75rem;
+}
+
+.totp-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  padding: 1rem 1.25rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.totp-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.totp-card-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.totp-setup-box {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: var(--bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.totp-qr {
+  margin: 0.75rem 0;
+  display: inline-block;
+  background: #fff;
+  padding: 0.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.totp-secret-display {
+  display: block;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-family: monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.1em;
+  word-break: break-all;
+  margin: 0.25rem 0;
+  user-select: all;
+}
