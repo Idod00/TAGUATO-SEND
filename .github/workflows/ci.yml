@@ -238,7 +238,7 @@ jobs:
         run: docker build -t taguato-gateway:test ./gateway
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@0.30.0
         with:
           image-ref: 'taguato-gateway:test'
           format: 'table'
