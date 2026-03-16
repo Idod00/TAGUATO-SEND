@@ -1,5 +1,5 @@
 // TAGUATO-SEND Service Worker
-const CACHE_NAME = 'taguato-v4';
+const CACHE_NAME = 'taguato-v7';
 const STATIC_ASSETS = [
   '/panel/',
   '/panel/index.html',
@@ -11,6 +11,14 @@ const STATIC_ASSETS = [
   '/panel/manifest.json',
   '/favicon.ico',
 ];
+
+const CORE_ASSETS = new Set([
+  '/panel/',
+  '/panel/index.html',
+  '/panel/js/api.js',
+  '/panel/js/app.js',
+  '/panel/sw.js',
+]);
 
 // Install: cache static assets
 self.addEventListener('install', (event) => {
@@ -43,7 +51,24 @@ self.addEventListener('fetch', (event) => {
       url.pathname.startsWith('/admin/') ||
       url.pathname.startsWith('/instance/') ||
       url.pathname.startsWith('/message/')) {
-    event.respondWith(fetch(event.request));
+    // Avoid HTTP cache (ETag/304) for dynamic API responses
+    event.respondWith(fetch(new Request(event.request, { cache: 'no-store' })));
+    return;
+  }
+
+  // Network-first for core app shell to avoid stale UI after upgrades
+  if (CORE_ASSETS.has(url.pathname)) {
+    event.respondWith(
+      fetch(new Request(event.request, { cache: 'no-store' }))
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
     return;
   }
 

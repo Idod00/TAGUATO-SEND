@@ -33,6 +33,13 @@ CREATE TABLE IF NOT EXISTS taguato.user_instances (
     UNIQUE(instance_name)
 );
 
+-- Telegram bot tokens (encrypted at rest; references user_instances by instance_name)
+CREATE TABLE IF NOT EXISTS taguato.telegram_instances (
+    instance_name VARCHAR(255) PRIMARY KEY REFERENCES taguato.user_instances(instance_name) ON DELETE CASCADE,
+    bot_token_enc TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_users_token ON taguato.users(api_token);
 CREATE INDEX IF NOT EXISTS idx_user_instances_user ON taguato.user_instances(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_instances_name ON taguato.user_instances(instance_name);

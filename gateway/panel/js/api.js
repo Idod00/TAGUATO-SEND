@@ -28,7 +28,7 @@ const API = (() => {
     if (token) {
       headers['apikey'] = token;
     }
-    const opts = { method, headers };
+    const opts = { method, headers, cache: 'no-store' };
     if (body) {
       opts.body = JSON.stringify(body);
     }

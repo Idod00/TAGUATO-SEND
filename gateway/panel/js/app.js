@@ -396,9 +396,11 @@ const App = (() => {
     }
     list.innerHTML = instances.map(inst => {
       const name = inst.instance?.instanceName || inst.name || inst.instanceName || 'Unknown';
-      const state = inst.instance?.state || inst.connectionStatus || inst.state || 'unknown';
+      const channelType = (inst.channelType || inst.channel_type || (inst.integration === 'TELEGRAM' ? 'telegram' : 'whatsapp')).toLowerCase();
+      const isTelegram = channelType === 'telegram';
+      const state = isTelegram ? 'open' : (inst.instance?.state || inst.connectionStatus || inst.state || 'unknown');
       const stateClass = state === 'open' ? 'connected' : (state === 'connecting' ? 'connecting' : 'disconnected');
-      const stateLabel = state === 'open' ? 'Conectado' : (state === 'connecting' ? 'Conectando' : 'Desconectado');
+      const stateLabel = isTelegram ? 'Activo' : (state === 'open' ? 'Conectado' : (state === 'connecting' ? 'Conectando' : 'Desconectado'));
       const ownerJid = inst.ownerJid || inst.instance?.owner;
       const phone = ownerJid ? ownerJid.split('@')[0] : null;
       const escapedName = esc(name);
@@ -411,13 +413,19 @@ const App = (() => {
           </div>
           <div class="instance-actions">
             <button class="btn btn-sm btn-secondary" onclick="App.openInstanceDetail('${escapedName}')">Detalles</button>
-            ${state === 'open'
+            ${isTelegram ? '' : (state === 'open'
               ? `<button class="btn btn-sm btn-warning" onclick="App.logoutInstance('${escapedName}')">Desconectar</button>`
-              : `<button class="btn btn-sm btn-primary" onclick="App.connectInstance('${escapedName}')">Conectar</button>`}
+              : `<button class="btn btn-sm btn-primary" onclick="App.connectInstance('${escapedName}')">Conectar</button>`)}
             <button class="btn btn-sm btn-danger" onclick="App.confirmDeleteInstance('${escapedName}')">Eliminar</button>
           </div>
         </div>`;
     }).join('');
+  }
+
+  function getInstanceChannelType(name) {
+    const instData = instances.find(i => (i.instance?.instanceName || i.name || i.instanceName) === name);
+    const channelType = instData?.channelType || instData?.channel_type || (instData?.integration === 'TELEGRAM' ? 'telegram' : 'whatsapp');
+    return (channelType || 'whatsapp').toLowerCase();
   }
 
   async function handleCreateInstance(e) {
@@ -456,6 +464,10 @@ const App = (() => {
   }
 
   async function connectInstance(name) {
+    if (getInstanceChannelType(name) === 'telegram') {
+      showToast('Las instancias Telegram (bots) no requieren conexion por QR', 'info');
+      return;
+    }
     const modal = $('#qr-modal');
     const content = $('#qr-content');
     content.innerHTML = '<div class="loading">Obteniendo QR...</div>';
@@ -534,14 +546,15 @@ const App = (() => {
     show(modal);
 
     try {
+      const isTelegram = getInstanceChannelType(name) === 'telegram';
       const [stats, statusRes] = await Promise.all([
         API.getInstanceStats(name),
-        API.getInstanceStatus(name).catch(() => null),
+        isTelegram ? Promise.resolve({ instance: { state: 'open' } }) : API.getInstanceStatus(name).catch(() => null),
       ]);
 
       const state = statusRes?.instance?.state || statusRes?.state || 'unknown';
       const stateClass = state === 'open' ? 'connected' : (state === 'connecting' ? 'connecting' : 'disconnected');
-      const stateLabel = state === 'open' ? 'Conectado' : (state === 'connecting' ? 'Conectando' : 'Desconectado');
+      const stateLabel = isTelegram ? 'Activo' : (state === 'open' ? 'Conectado' : (state === 'connecting' ? 'Conectando' : 'Desconectado'));
 
       const instData = instances.find(i => (i.instance?.instanceName || i.name || i.instanceName) === name);
       const detailOwnerJid = instData?.ownerJid || instData?.instance?.owner;
@@ -579,12 +592,14 @@ const App = (() => {
       // Actions
       const escapedName = esc(name);
       html += `<div class="detail-actions">`;
-      if (state === 'open') {
-        html += `<button class="btn btn-sm btn-warning" onclick="App.logoutInstance('${escapedName}')">Desconectar</button>`;
-      } else {
-        html += `<button class="btn btn-sm btn-primary" onclick="App.connectInstance('${escapedName}');App.closeModal('instance-detail-modal')">Conectar</button>`;
+      if (!isTelegram) {
+        if (state === 'open') {
+          html += `<button class="btn btn-sm btn-warning" onclick="App.logoutInstance('${escapedName}')">Desconectar</button>`;
+        } else {
+          html += `<button class="btn btn-sm btn-primary" onclick="App.connectInstance('${escapedName}');App.closeModal('instance-detail-modal')">Conectar</button>`;
+        }
+        html += `<button class="btn btn-sm btn-secondary" onclick="App.restartInstance('${escapedName}')">Reiniciar</button>`;
       }
-      html += `<button class="btn btn-sm btn-secondary" onclick="App.restartInstance('${escapedName}')">Reiniciar</button>`;
       html += `<button class="btn btn-sm btn-danger" onclick="App.confirmDeleteInstance('${escapedName}');App.closeModal('instance-detail-modal')">Eliminar</button>`;
       html += `</div>`;
 
@@ -651,7 +666,7 @@ const App = (() => {
       content.innerHTML = html;
 
       // Auto-refresh state badge every 15s
-      _detailRefreshTimer = setInterval(async () => {
+      if (!isTelegram) _detailRefreshTimer = setInterval(async () => {
         if (modal.classList.contains('hidden')) {
           clearInterval(_detailRefreshTimer);
           _detailRefreshTimer = null;
@@ -676,6 +691,10 @@ const App = (() => {
   }
 
   async function logoutInstance(name) {
+    if (getInstanceChannelType(name) === 'telegram') {
+      showToast('En Telegram no aplica desconectar (bots)', 'info');
+      return;
+    }
     if (!confirm('Desconectar instancia "' + name + '"?')) return;
     try {
       await API.logoutInstance(name);
@@ -692,6 +711,10 @@ const App = (() => {
   }
 
   async function restartInstance(name) {
+    if (getInstanceChannelType(name) === 'telegram') {
+      showToast('En Telegram no aplica reiniciar (bots)', 'info');
+      return;
+    }
     try {
       showToast('Reiniciando instancia...');
       await API.restartInstance(name);
@@ -712,6 +735,7 @@ const App = (() => {
   function loadMessageSection() {
     loadInstanceSelect();
     loadTemplateSelects();
+    updateRecipientFieldsForInstance($('#msg-instance')?.value || '');
     // Reset bulk progress on section load
     hide($('#bulk-progress-zone'));
   }
@@ -723,12 +747,28 @@ const App = (() => {
       if (!sel) return;
       sel.innerHTML = '<option value="">Seleccionar instancia...</option>';
       instances.forEach(inst => {
+        const channelType = (inst.channelType || inst.channel_type || (inst.integration === 'TELEGRAM' ? 'telegram' : 'whatsapp')).toLowerCase();
+        if (selId === '#bulk-instance' && channelType === 'telegram') return; // bulk: WhatsApp only
         const name = inst.instance?.instanceName || inst.name || inst.instanceName || '';
         if (name) {
           sel.innerHTML += `<option value="${esc(name)}">${esc(name)}</option>`;
         }
       });
     });
+  }
+
+  function updateRecipientFieldsForInstance(instanceName) {
+    const channel = getInstanceChannelType(instanceName);
+    const label = document.querySelector('label[for="msg-number"]');
+    const input = $('#msg-number');
+    if (!label || !input) return;
+    if (channel === 'telegram') {
+      label.textContent = 'Chat ID destino';
+      input.placeholder = '123456789';
+    } else {
+      label.textContent = 'Numero destino';
+      input.placeholder = '595981123456';
+    }
   }
 
   function setMsgType(type) {
@@ -2877,6 +2917,9 @@ const App = (() => {
       }
     });
     on('#send-message-form', 'submit', handleSendMessage);
+    on('#msg-instance', 'change', function() {
+      updateRecipientFieldsForInstance(this.value);
+    });
     on('#bulk-message-form', 'submit', handleBulkMessage);
     on('#bulk-cancel-btn', 'click', () => {
       API.cancelBulk();

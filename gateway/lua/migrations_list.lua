@@ -151,4 +151,15 @@ return {
             ALTER TABLE taguato.users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false;
         ]],
     },
+    {
+        version = 13,
+        name = "add_telegram_instances_table",
+        sql = [[
+            CREATE TABLE IF NOT EXISTS taguato.telegram_instances (
+                instance_name VARCHAR(255) PRIMARY KEY REFERENCES taguato.user_instances(instance_name) ON DELETE CASCADE,
+                bot_token_enc TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
+            );
+        ]],
+    },
 }
