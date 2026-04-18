@@ -166,6 +166,7 @@
         <a href="#" class="nav-link" data-section="ayuda">Ayuda</a>
         <a href="#" class="nav-link hidden" id="nav-status" data-section="status">Status</a>
         <a href="#" class="nav-link hidden" id="nav-admin" data-section="admin">Admin</a>
+        <a href="#" class="nav-link hidden" id="nav-admin-instances" data-section="admin-instances">Instancias</a>
         <a href="#" class="nav-link hidden" id="nav-audit" data-section="audit">Auditoria</a>
         <a href="#" class="nav-link hidden" id="nav-backup" data-section="backup">Backups</a>
       </nav>
@@ -600,6 +601,37 @@
         </form>
 
         <div id="users-list"></div>
+      </div>
+
+      <!-- Admin Instances Section -->
+      <div id="section-admin-instances" class="section hidden">
+        <h2>Gestion de Instancias</h2>
+        <p class="text-muted">Asigna acceso a instancias de otros usuarios. El propietario original conserva su acceso.</p>
+        <div id="admin-instances-list">
+          <div class="loading">Cargando...</div>
+        </div>
+      </div>
+
+      <!-- Grant Instance Access Modal -->
+      <div id="modal-grant-instance" class="modal-overlay" style="display:none">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>Dar acceso a instancia</h3>
+            <button class="modal-close" onclick="App.closeModal('modal-grant-instance')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p>Instancia: <strong id="grant-instance-name"></strong></p>
+            <div class="form-group">
+              <label>ID del usuario a quien otorgar acceso</label>
+              <input type="number" id="grant-user-id" class="form-control" placeholder="ID de usuario" min="1">
+              <small class="text-muted">Puedes ver los IDs de usuarios en la seccion Admin.</small>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="App.closeModal('modal-grant-instance')">Cancelar</button>
+            <button class="btn btn-primary" onclick="App.submitGrantInstanceAccess()">Otorgar acceso</button>
+          </div>
+        </div>
       </div>
 
       <!-- Audit Section (admin only) -->

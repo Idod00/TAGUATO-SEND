@@ -93,6 +93,7 @@ const App = (() => {
     if (section === 'seguridad') load2FAStatus();
     if (section === 'docs') renderDocs();
     if (section === 'admin') loadUsers();
+    if (section === 'admin-instances') loadAdminInstances();
     if (section === 'audit') { auditPage = 1; loadAuditLogs(); }
     if (section === 'backup') loadBackups();
     if (section === 'status') loadStatusSection();
@@ -351,6 +352,7 @@ const App = (() => {
 
     // Show/hide admin nav
     const adminNav = $('#nav-admin');
+    const adminInstancesNav = $('#nav-admin-instances');
     const statusNav = $('#nav-status');
     const dashboardNav = $('#nav-dashboard');
     const auditNav = $('#nav-audit');
@@ -358,6 +360,7 @@ const App = (() => {
     const userDashNav = $('#nav-user-dashboard');
     if (currentUser.role === 'admin') {
       show(adminNav);
+      show(adminInstancesNav);
       show(statusNav);
       show(dashboardNav);
       show(auditNav);
@@ -365,6 +368,7 @@ const App = (() => {
       hide(userDashNav);
     } else {
       hide(adminNav);
+      hide(adminInstancesNav);
       hide(statusNav);
       hide(dashboardNav);
       hide(auditNav);
@@ -2997,6 +3001,90 @@ const App = (() => {
     }
   }
 
+  // --- Admin Instance Permissions ---
+  let _grantingInstance = null;
+
+  async function loadAdminInstances() {
+    const container = $('#admin-instances-list');
+    if (!container) return;
+    container.innerHTML = '<div class="loading">Cargando instancias...</div>';
+    try {
+      const data = await API.listAdminInstances();
+      renderAdminInstances(data.instances || []);
+    } catch (err) {
+      container.innerHTML = `<div class="error">${esc(err.message)}</div>`;
+    }
+  }
+
+  function renderAdminInstances(instances) {
+    const container = $('#admin-instances-list');
+    if (!container) return;
+    if (!instances.length) {
+      container.innerHTML = '<div class="empty">No hay instancias registradas.</div>';
+      return;
+    }
+    container.innerHTML = instances.map(inst => {
+      const grants = inst.grants || [];
+      const grantsHtml = grants.length ? grants.map(g =>
+        `<span class="tag">
+          ${esc(g.username)}
+          <button class="btn-icon" onclick="App.confirmRevokeInstanceAccess('${esc(inst.instance_name)}',${g.user_id},'${esc(g.username)}')" title="Revocar acceso">&times;</button>
+        </span>`
+      ).join('') : '<em class="text-muted">Sin acceso adicional</em>';
+
+      return `
+        <div class="card mb-2 p-3">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <strong>${esc(inst.instance_name)}</strong>
+              <span class="badge ${inst.channel_type === 'telegram' ? 'badge-blue' : 'badge-green'}">${esc(inst.channel_type || 'whatsapp')}</span>
+              <div class="text-muted small">Propietario: <strong>${esc(inst.owner_username)}</strong></div>
+            </div>
+            <button class="btn btn-sm btn-secondary" onclick="App.openGrantInstanceModal('${esc(inst.instance_name)}')">
+              + Dar acceso
+            </button>
+          </div>
+          <div class="mt-2 d-flex flex-wrap gap-1">
+            ${grantsHtml}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function openGrantInstanceModal(instanceName) {
+    _grantingInstance = instanceName;
+    const modal = $('#modal-grant-instance');
+    if (modal) {
+      $('#grant-instance-name').textContent = instanceName;
+      $('#grant-user-id').value = '';
+      modal.style.display = 'flex';
+    }
+  }
+
+  async function submitGrantInstanceAccess() {
+    const userId = parseInt($('#grant-user-id').value, 10);
+    if (!userId || !_grantingInstance) return;
+    try {
+      await API.grantInstanceAccess(_grantingInstance, userId);
+      closeModal('modal-grant-instance');
+      showToast('Acceso otorgado');
+      loadAdminInstances();
+    } catch (err) {
+      showToast(err.message || 'Error al otorgar acceso', 'error');
+    }
+  }
+
+  async function confirmRevokeInstanceAccess(instanceName, userId, username) {
+    if (!confirm(`Revocar acceso de "${username}" a la instancia "${instanceName}"?`)) return;
+    try {
+      await API.revokeInstanceAccess(instanceName, userId);
+      showToast('Acceso revocado');
+      loadAdminInstances();
+    } catch (err) {
+      showToast(err.message || 'Error al revocar acceso', 'error');
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', init);
 
   return {
@@ -3028,6 +3116,10 @@ const App = (() => {
     editUser,
     confirmDeleteUser,
     adminResetPassword,
+    loadAdminInstances,
+    confirmRevokeInstanceAccess,
+    openGrantInstanceModal,
+    submitGrantInstanceAccess,
     openIncidentUpdate,
     confirmDeleteIncident,
     startMaintenance,

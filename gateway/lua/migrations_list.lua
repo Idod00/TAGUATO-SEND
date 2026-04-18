@@ -162,4 +162,20 @@ return {
             );
         ]],
     },
+    {
+        version = 14,
+        name = "add_instance_permissions",
+        sql = [[
+            CREATE TABLE IF NOT EXISTS taguato.instance_permissions (
+                id SERIAL PRIMARY KEY,
+                instance_name VARCHAR(255) NOT NULL REFERENCES taguato.user_instances(instance_name) ON DELETE CASCADE,
+                grantee_user_id INT NOT NULL REFERENCES taguato.users(id) ON DELETE CASCADE,
+                granted_by INT REFERENCES taguato.users(id) ON DELETE SET NULL,
+                granted_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(instance_name, grantee_user_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_instance_permissions_user ON taguato.instance_permissions(grantee_user_id);
+            CREATE INDEX IF NOT EXISTS idx_instance_permissions_instance ON taguato.instance_permissions(instance_name);
+        ]],
+    },
 }

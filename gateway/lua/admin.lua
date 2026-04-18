@@ -482,5 +482,128 @@ if method == "DELETE" and user_id then
     return
 end
 
+-- ============ INSTANCE PERMISSIONS ============
+-- GET  /admin/instances                    — list all instances with owner + permissions
+-- POST /admin/instances/:name/grant        — grant user access to an instance
+-- DELETE /admin/instances/:name/grant/:uid — revoke user access
+
+local instance_grant_del = uri:match("^/admin/instances/([^/]+)/grant/(%d+)$")
+if instance_grant_del then
+    local inst_name, target_uid = uri:match("^/admin/instances/([^/]+)/grant/(%d+)$")
+    target_uid = tonumber(target_uid)
+
+    if method == "DELETE" then
+        local del, derr = db.query(
+            "DELETE FROM taguato.instance_permissions WHERE instance_name = $1 AND grantee_user_id = $2 RETURNING id",
+            inst_name, target_uid
+        )
+        if not del or #del == 0 then
+            json.respond(404, { error = "Permission not found" })
+            return
+        end
+        local audit = require "audit"
+        pcall(audit.log, user.id, user.username, "instance_grant_revoked", "instance", inst_name,
+            { grantee_user_id = target_uid }, ngx.var.remote_addr)
+        json.respond(200, { message = "Access revoked", instance = inst_name, user_id = target_uid })
+        return
+    end
+end
+
+local instance_grant = uri:match("^/admin/instances/([^/]+)/grant$")
+if instance_grant and method == "POST" then
+    local body, berr = json.read_body()
+    if not body or not body.user_id then
+        json.respond(400, { error = "user_id is required" })
+        return
+    end
+    local target_uid = tonumber(body.user_id)
+    if not target_uid then
+        json.respond(400, { error = "user_id must be a number" })
+        return
+    end
+
+    -- Verify instance exists in user_instances
+    local inst_check = db.query(
+        "SELECT user_id FROM taguato.user_instances WHERE instance_name = $1",
+        instance_grant
+    )
+    if not inst_check or #inst_check == 0 then
+        json.respond(404, { error = "Instance not found" })
+        return
+    end
+    -- Cannot grant to the owner
+    if inst_check[1].user_id == target_uid then
+        json.respond(400, { error = "User is already the instance owner" })
+        return
+    end
+
+    -- Verify target user exists
+    local user_check = db.query("SELECT id FROM taguato.users WHERE id = $1", target_uid)
+    if not user_check or #user_check == 0 then
+        json.respond(404, { error = "Target user not found" })
+        return
+    end
+
+    local ins, ierr = db.query(
+        [[INSERT INTO taguato.instance_permissions (instance_name, grantee_user_id, granted_by)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (instance_name, grantee_user_id) DO NOTHING
+          RETURNING id]],
+        instance_grant, target_uid, user.id
+    )
+    if not ins or #ins == 0 then
+        json.respond(409, { error = "User already has access to this instance" })
+        return
+    end
+    local audit = require "audit"
+    pcall(audit.log, user.id, user.username, "instance_grant_created", "instance", instance_grant,
+        { grantee_user_id = target_uid }, ngx.var.remote_addr)
+    json.respond(201, { message = "Access granted", instance = instance_grant, user_id = target_uid })
+    return
+end
+
+if uri == "/admin/instances" and method == "GET" then
+    -- List all instances from user_instances with owner info and granted users
+    local rows, rerr = db.query(
+        [[SELECT
+              ui.instance_name,
+              ui.channel_type,
+              ui.created_at,
+              u.id    AS owner_id,
+              u.username AS owner_username,
+              COALESCE((
+                  SELECT json_agg(json_build_object(
+                      'user_id', ip.grantee_user_id,
+                      'username', gu.username,
+                      'granted_at', ip.granted_at
+                  ) ORDER BY ip.granted_at)
+                  FROM taguato.instance_permissions ip
+                  JOIN taguato.users gu ON gu.id = ip.grantee_user_id
+                  WHERE ip.instance_name = ui.instance_name
+              ), '[]') AS grants
+          FROM taguato.user_instances ui
+          JOIN taguato.users u ON u.id = ui.user_id
+          ORDER BY ui.created_at DESC]]
+    )
+    if not rows then
+        json.respond(500, { error = "Failed to list instances" })
+        return
+    end
+    local instances = {}
+    for _, row in ipairs(rows) do
+        local ok, grants = pcall(cjson.decode, row.grants or "[]")
+        instances[#instances + 1] = {
+            instance_name  = row.instance_name,
+            channel_type   = row.channel_type,
+            created_at     = row.created_at,
+            owner_id       = row.owner_id,
+            owner_username = row.owner_username,
+            grants         = ok and grants or as_array(nil),
+        }
+    end
+    json.respond(200, { instances = as_array(instances) })
+    return
+end
+
 -- If we got here, no route matched
 json.respond(404, { error = "Not found" })

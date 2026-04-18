@@ -428,6 +428,19 @@ const API = (() => {
     return await request('DELETE', '/admin/maintenance/' + id);
   }
 
+  // Instance permissions (admin)
+  async function listAdminInstances() {
+    return await request('GET', '/admin/instances');
+  }
+
+  async function grantInstanceAccess(instanceName, userId) {
+    return await request('POST', `/admin/instances/${instanceName}/grant`, { user_id: userId });
+  }
+
+  async function revokeInstanceAccess(instanceName, userId) {
+    return await request('DELETE', `/admin/instances/${instanceName}/grant/${userId}`);
+  }
+
   return {
     getToken, getStoredUser, setSession, clearSession,
     login, logout, getProfile, changePassword, forgotPassword, verifyResetCode, resetPassword,
@@ -449,5 +462,6 @@ const API = (() => {
     getPublicStatus, listIncidents, listIncidentServices,
     createIncident, addIncidentUpdate, updateIncident, deleteIncident,
     listMaintenances, createMaintenance, updateMaintenance, deleteMaintenance,
+    listAdminInstances, grantInstanceAccess, revokeInstanceAccess,
   };
 })();

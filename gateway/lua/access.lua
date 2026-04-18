@@ -58,11 +58,19 @@ local method = ngx.req.get_method()
 local uri = ngx.var.uri
 local is_admin = user.role == "admin"
 
--- Helper: check if user owns an instance
+-- Helper: check if user owns an instance (direct or via granted permission)
 local function user_owns_instance(instance_name)
     local res = db.query(
-        "SELECT id FROM taguato.user_instances WHERE user_id = $1 AND instance_name = $2",
-        user.id, instance_name
+        [[SELECT 1 FROM taguato.user_instances
+          WHERE instance_name = $1 AND (
+              user_id = $2
+              OR EXISTS(
+                  SELECT 1 FROM taguato.instance_permissions
+                  WHERE instance_name = $1 AND grantee_user_id = $2
+              )
+          )
+          LIMIT 1]],
+        instance_name, user.id
     )
     return res and #res > 0
 end
@@ -208,6 +216,30 @@ local function build_multipart_form(fields, file_field)
     return table.concat(parts), "multipart/form-data; boundary=" .. boundary
 end
 
+-- Helper: call Evolution API directly (avoid proxy/fire-and-forget issues)
+local function call_evolution_api(method, path, body_data)
+    local http = require "resty.http"
+    local cjson = require "cjson"
+    local httpc = http.new()
+    httpc:set_timeout(30000)
+    local req = {
+        method = method,
+        headers = {
+            ["apikey"] = os.getenv("AUTHENTICATION_API_KEY"),
+            ["Content-Type"] = "application/json",
+        },
+    }
+    if body_data then
+        req.body = cjson.encode(body_data)
+    end
+    local res, err = httpc:request_uri("http://taguato-api:8080" .. path, req)
+    if not res then
+        return nil, err
+    end
+    local ok, decoded = pcall(cjson.decode, res.body or "")
+    return { status = res.status, body = ok and decoded or {} }, nil
+end
+
 -- Helper: count user instances
 local function count_user_instances()
     local res = db.query(
@@ -220,10 +252,12 @@ local function count_user_instances()
     return 0
 end
 
--- Helper: get user's instance names as a set
+-- Helper: get user's instance names as a set (owned + granted)
 local function get_user_instance_names()
     local res = db.query(
-        "SELECT instance_name FROM taguato.user_instances WHERE user_id = $1",
+        [[SELECT instance_name FROM taguato.user_instances WHERE user_id = $1
+          UNION
+          SELECT instance_name FROM taguato.instance_permissions WHERE grantee_user_id = $1]],
         user.id
     )
     local names = {}
@@ -384,13 +418,6 @@ if uri == "/instance/create" and method == "POST" then
 
     local instance_name = body.instanceName
 
-    -- Admin: proxy WhatsApp instance creation directly to Evolution API (no ownership insert)
-    if is_admin and body.integration ~= "TELEGRAM" then
-        ngx.req.set_body_data(json.encode(body))
-        ngx.req.set_header("apikey", os.getenv("AUTHENTICATION_API_KEY"))
-        return
-    end
-
     -- Validate instance name format
     local validate = require "validate"
     local name_ok, name_err = validate.validate_instance_name(instance_name)
@@ -415,6 +442,7 @@ if uri == "/instance/create" and method == "POST" then
     end
 
     local ins_res, ins_err
+    -- Admin has unlimited instances; use large number so COUNT check always passes
     local max_instances = is_admin and 1000000 or user.max_instances
 
     if channel_type == "telegram" then
@@ -424,7 +452,7 @@ if uri == "/instance/create" and method == "POST" then
             return
         end
 
-        -- Create ownership record + store encrypted bot token atomically (no upstream call to Evolution API)
+        -- Create ownership record + store encrypted bot token atomically (no upstream call)
         ins_res, ins_err = db.query(
             [[WITH ins AS (
                   INSERT INTO taguato.user_instances (user_id, instance_name, channel_type)
@@ -440,20 +468,44 @@ if uri == "/instance/create" and method == "POST" then
               RETURNING instance_name]],
             user.id, instance_name, max_instances, body.token, secret
         )
-    else
-        -- Atomic insert: check limit + uniqueness in one query
-        ins_res, ins_err = db.query(
-            [[INSERT INTO taguato.user_instances (user_id, instance_name, channel_type)
-              SELECT $1, $2, 'whatsapp'
-              WHERE (SELECT COUNT(*) FROM taguato.user_instances WHERE user_id = $1) < $3
-              ON CONFLICT (instance_name) DO NOTHING
-              RETURNING id]],
-            user.id, instance_name, max_instances
-        )
+
+        if not ins_res or #ins_res == 0 then
+            local existing = db.query(
+                "SELECT user_id FROM taguato.user_instances WHERE instance_name = $1",
+                instance_name
+            )
+            if existing and #existing > 0 then
+                json.respond(409, { error = "Instance name already in use" })
+            else
+                local count = count_user_instances()
+                json.respond(403, {
+                    error = "Instance limit reached",
+                    current = count,
+                    max = user.max_instances
+                })
+            end
+            return
+        end
+
+        json.respond(201, {
+            message = "Instance created",
+            channel_type = "telegram",
+            instance_name = instance_name,
+        })
+        return
     end
 
+    -- WhatsApp: atomic insert into user_instances first
+    ins_res, ins_err = db.query(
+        [[INSERT INTO taguato.user_instances (user_id, instance_name, channel_type)
+          SELECT $1, $2, 'whatsapp'
+          WHERE (SELECT COUNT(*) FROM taguato.user_instances WHERE user_id = $1) < $3
+          ON CONFLICT (instance_name) DO NOTHING
+          RETURNING id]],
+        user.id, instance_name, max_instances
+    )
+
     if not ins_res or #ins_res == 0 then
-        -- Determine if it was a limit issue or a duplicate name
         local existing = db.query(
             "SELECT user_id FROM taguato.user_instances WHERE instance_name = $1",
             instance_name
@@ -471,18 +523,30 @@ if uri == "/instance/create" and method == "POST" then
         return
     end
 
-    if channel_type == "telegram" then
-        json.respond(201, {
-            message = "Instance created",
-            channel_type = "telegram",
-            instance_name = instance_name,
-        })
+    -- Call Evolution API explicitly — rollback user_instances if it fails
+    local api_res, api_err = call_evolution_api("POST", "/instance/create", body)
+    if not api_res then
+        -- API unreachable: rollback ownership record
+        db.query(
+            "DELETE FROM taguato.user_instances WHERE user_id = $1 AND instance_name = $2",
+            user.id, instance_name
+        )
+        json.respond(502, { error = "WhatsApp API unavailable", details = api_err })
         return
     end
 
-    -- WhatsApp instance: proxy to Evolution API
-    ngx.req.set_body_data(json.encode(body))
-    ngx.req.set_header("apikey", os.getenv("AUTHENTICATION_API_KEY"))
+    if api_res.status >= 400 then
+        -- API rejected the create: rollback ownership record
+        db.query(
+            "DELETE FROM taguato.user_instances WHERE user_id = $1 AND instance_name = $2",
+            user.id, instance_name
+        )
+        json.respond(api_res.status, api_res.body)
+        return
+    end
+
+    -- Success: return Evolution API response
+    json.respond(api_res.status, api_res.body)
     return
 end
 
@@ -496,6 +560,30 @@ if delete_instance and method == "DELETE" then
 
     local channel_type = get_instance_channel_type(delete_instance) or "whatsapp"
 
+    -- For Telegram: delete DB records only (no Evolution API call)
+    if channel_type == "telegram" then
+        if is_admin then
+            db.query(
+                "DELETE FROM taguato.user_instances WHERE instance_name = $1",
+                delete_instance
+            )
+        else
+            db.query(
+                "DELETE FROM taguato.user_instances WHERE user_id = $1 AND instance_name = $2",
+                user.id, delete_instance
+            )
+        end
+        json.respond(200, { message = "Instance deleted", instance = delete_instance })
+        return
+    end
+
+    -- WhatsApp: call Evolution API explicitly then clean up DB
+    local api_res, api_err = call_evolution_api("DELETE", "/instance/delete/" .. delete_instance)
+    if not api_res then
+        ngx.log(ngx.WARN, "instance_delete: API unreachable for ", delete_instance, ": ", api_err or "unknown")
+    end
+
+    -- Always clean up gateway state regardless of Evolution API result
     if is_admin then
         db.query(
             "DELETE FROM taguato.user_instances WHERE instance_name = $1",
@@ -508,12 +596,12 @@ if delete_instance and method == "DELETE" then
         )
     end
 
-    if channel_type == "telegram" then
+    -- Forward Evolution API response or return success (404 = already gone = success)
+    if api_res and api_res.status >= 400 and api_res.status ~= 404 then
+        json.respond(api_res.status, api_res.body)
+    else
         json.respond(200, { message = "Instance deleted", instance = delete_instance })
-        return
     end
-
-    ngx.req.set_header("apikey", os.getenv("AUTHENTICATION_API_KEY"))
     return
 end
 
