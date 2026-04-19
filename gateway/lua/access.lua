@@ -278,6 +278,24 @@ end
 local send_text_instance = uri:match("^/message/sendText/([^/]+)$")
 if send_text_instance and method == "POST" then
     local channel_type = get_instance_channel_type(send_text_instance) or "whatsapp"
+    if channel_type ~= "telegram" then
+        -- WhatsApp: read body to capture phone for auto-logging, then re-set for proxy
+        if not is_admin and not user_owns_instance(send_text_instance) then
+            json.respond(403, { error = "You don't own this instance" })
+            return
+        end
+        local body = json.read_body()
+        if body and body.number then
+            ngx.ctx.msg_log = {
+                instance = send_text_instance,
+                phone    = tostring(body.number),
+                msg_type = "text",
+            }
+            ngx.req.set_body_data(json.encode(body))
+        end
+        ngx.req.set_header("apikey", os.getenv("AUTHENTICATION_API_KEY"))
+        return
+    end
     if channel_type == "telegram" then
         if not is_admin and not user_owns_instance(send_text_instance) then
             json.respond(403, { error = "You don't own this instance" })
@@ -321,6 +339,24 @@ end
 local send_media_instance = uri:match("^/message/sendMedia/([^/]+)$")
 if send_media_instance and method == "POST" then
     local channel_type = get_instance_channel_type(send_media_instance) or "whatsapp"
+    if channel_type ~= "telegram" then
+        -- WhatsApp: read body to capture phone + type for auto-logging, then re-set for proxy
+        if not is_admin and not user_owns_instance(send_media_instance) then
+            json.respond(403, { error = "You don't own this instance" })
+            return
+        end
+        local body = json.read_body()
+        if body and body.number then
+            ngx.ctx.msg_log = {
+                instance = send_media_instance,
+                phone    = tostring(body.number),
+                msg_type = body.mediatype or "media",
+            }
+            ngx.req.set_body_data(json.encode(body))
+        end
+        ngx.req.set_header("apikey", os.getenv("AUTHENTICATION_API_KEY"))
+        return
+    end
     if channel_type == "telegram" then
         if not is_admin and not user_owns_instance(send_media_instance) then
             json.respond(403, { error = "You don't own this instance" })
